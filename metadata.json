@@ -1,0 +1,6 @@
+{
+  "name": "THIKANA",
+  "description": "Zero Commission WhatsApp-First Hotel & Homestay Marketplace",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
