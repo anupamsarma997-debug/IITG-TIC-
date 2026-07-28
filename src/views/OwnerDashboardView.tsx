@@ -29,10 +29,14 @@ import {
 interface OwnerDashboardViewProps {
   onOpenAddPropertyModal?: () => void;
   onSelectProperty?: (property: Property) => void;
+  autoOpenAddProperty?: boolean;
+  onAddPropertyHandled?: () => void;
 }
 
 export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   onSelectProperty,
+  autoOpenAddProperty,
+  onAddPropertyHandled,
 }) => {
   const currentUser = store.getCurrentUser();
   const [properties, setProperties] = useState<Property[]>(
@@ -65,6 +69,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
   // Room Management State
   const [editingRoomsPropId, setEditingRoomsPropId] = useState<string | null>(null);
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState('Deluxe Mountain View Room');
   const [pricePerNight, setPricePerNight] = useState(2000);
   const [discountPrice, setDiscountPrice] = useState(1700);
@@ -76,6 +81,15 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'properties' | 'subscriptions' | 'leads'>('properties');
+
+  React.useEffect(() => {
+    if (autoOpenAddProperty) {
+      handleOpenAdd();
+      if (onAddPropertyHandled) {
+        onAddPropertyHandled();
+      }
+    }
+  }, [autoOpenAddProperty]);
 
   React.useEffect(() => {
     return store.subscribe(() => {
@@ -95,16 +109,27 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     setDescription('');
     setPropertyType('Homestay');
     setAddress('');
-    setCity('Manali');
-    setStateName('Himachal Pradesh');
+    setCity('Kaziranga');
+    setStateName('Assam');
     setGoogleMapUrl('');
-    setLatitude(32.2432);
-    setLongitude(77.1892);
-    setNearbyAttractions('Mall Road (1.5 km), Scenic Viewpoint (2 km)');
+    setLatitude(26.5775);
+    setLongitude(93.1711);
+    setNearbyAttractions('Kohora Safari Gate (1.5 km), Orchid Park (2 km)');
     setCheckInTime('12:00 PM');
     setCheckOutTime('11:00 AM');
     setPhotoUrlsInput('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80\nhttps://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80');
     setVideoUrl('');
+
+    // Pre-fill initial room setup
+    setRoomName('Traditional Bamboo Stilt (Chang Ghar) Suite');
+    setPricePerNight(2200);
+    setDiscountPrice(1800);
+    setMaxGuests(3);
+    setRoomSize('300 sq.ft.');
+    setBedType('King Bamboo Bed');
+    setRoomDescription('Authentic bamboo homestay with tea garden views & hot shower.');
+    setRoomAmenities('WiFi, Geyser, Electric Kettle, Balcony View, Breakfast Included');
+
     setIsFormOpen(true);
   };
 
@@ -223,48 +248,95 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         ownerWhatsApp,
       });
 
-      // Automatically add default room type for the new property
+      // Automatically add default room type with host's specified room name & pricing
+      const amList = roomAmenities
+        ? roomAmenities.split(',').map((s) => s.trim()).filter(Boolean)
+        : ['Free WiFi', 'Hot Shower', 'Clean Linen'];
+
       store.addRoomType({
         propertyId: newProp.id,
-        roomName: 'Standard Comfort Room',
-        pricePerNight: 2000,
-        discountPrice: 1600,
-        maxGuests: 2,
-        description: 'Clean room with mountain view and hot water.',
-        amenities: ['Free WiFi', 'Hot Shower', 'Clean Linen'],
-        roomSize: '220 sq.ft.',
-        bedType: 'Double Bed',
+        roomName: roomName || 'Standard Room',
+        pricePerNight: pricePerNight || 2000,
+        discountPrice: discountPrice || pricePerNight || 1800,
+        maxGuests: maxGuests || 2,
+        description: roomDescription || 'Clean room with hot shower and warm hospitality.',
+        amenities: amList,
+        roomSize: roomSize || '250 sq.ft.',
+        bedType: bedType || 'Double Bed',
       });
 
-      alert('New property added successfully!');
+      alert('New property and room pricing saved successfully!');
     }
 
     setIsFormOpen(false);
   };
 
-  // Add Room Type to Property
-  const handleAddRoomType = (e: React.FormEvent) => {
+  // Open Modal to Add Room Type
+  const handleOpenAddRoom = (propertyId: string) => {
+    setEditingRoomsPropId(propertyId);
+    setEditingRoomId(null);
+    setRoomName('Deluxe Balcony Room');
+    setPricePerNight(2200);
+    setDiscountPrice(1800);
+    setMaxGuests(3);
+    setRoomDescription('Comfortable room with mountain/garden view, attached bath and hot shower.');
+    setRoomSize('280 sq ft');
+    setBedType('King Size Bed');
+    setRoomAmenities('Free WiFi, Geyser, Electric Kettle, Balcony View');
+  };
+
+  // Open Modal to Edit Existing Room Type & Price
+  const handleOpenEditRoom = (propertyId: string, room: RoomType) => {
+    setEditingRoomsPropId(propertyId);
+    setEditingRoomId(room.id);
+    setRoomName(room.roomName);
+    setPricePerNight(room.pricePerNight);
+    setDiscountPrice(room.discountPrice || room.pricePerNight);
+    setMaxGuests(room.maxGuests);
+    setRoomDescription(room.description || '');
+    setRoomSize(room.roomSize || '250 sq ft');
+    setBedType(room.bedType || 'Double Bed');
+    setRoomAmenities((room.amenities || []).join(', '));
+  };
+
+  // Save or Update Room Type & Prices
+  const handleSaveRoomType = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRoomsPropId) return;
 
     const amList = roomAmenities.split(',').map((s) => s.trim()).filter(Boolean);
 
-    store.addRoomType({
-      propertyId: editingRoomsPropId,
-      roomName,
-      pricePerNight,
-      discountPrice,
-      maxGuests,
-      description: roomDescription,
-      amenities: amList,
-      roomSize,
-      bedType,
-    });
+    if (editingRoomId) {
+      // Update existing room
+      store.updateRoom(editingRoomId, {
+        roomName,
+        pricePerNight,
+        discountPrice,
+        maxGuests,
+        description: roomDescription,
+        amenities: amList,
+        roomSize,
+        bedType,
+      });
+      alert('Room type and prices updated successfully!');
+    } else {
+      // Add new room
+      store.addRoomType({
+        propertyId: editingRoomsPropId,
+        roomName,
+        pricePerNight,
+        discountPrice,
+        maxGuests,
+        description: roomDescription,
+        amenities: amList,
+        roomSize,
+        bedType,
+      });
+      alert('New room type and pricing added successfully!');
+    }
 
-    alert('Room type added successfully!');
-    setRoomName('Executive Suite');
-    setPricePerNight(3000);
-    setDiscountPrice(2500);
+    setEditingRoomsPropId(null);
+    setEditingRoomId(null);
   };
 
   // Upgrade Plan / Buy Badges
@@ -444,40 +516,62 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                         </button>
                       </div>
 
-                      {/* Room Types summary */}
+                      {/* Room Types & Pricing Summary */}
                       <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 text-xs space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="font-extrabold text-slate-800 dark:text-slate-200">
-                            Room Types ({rooms.length})
+                            Room Types & Pricing ({rooms.length})
                           </span>
                           <button
-                            onClick={() => setEditingRoomsPropId(property.id)}
-                            className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1 text-[11px]"
+                            onClick={() => handleOpenAddRoom(property.id)}
+                            className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-extrabold px-2.5 py-1 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1 text-[11px] cursor-pointer"
                           >
                             <PlusCircle className="w-3.5 h-3.5" />
-                            <span>Add Room Type</span>
+                            <span>+ Add Room & Price</span>
                           </button>
                         </div>
 
                         {rooms.map((r) => (
                           <div
                             key={r.id}
-                            className="bg-slate-50 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between"
+                            className="bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2"
                           >
                             <div>
-                              <p className="font-bold text-slate-900 dark:text-white text-xs">{r.roomName}</p>
-                              <p className="text-[10px] text-slate-500">Max {r.maxGuests} Guests • {r.bedType}</p>
+                              <p className="font-extrabold text-slate-900 dark:text-white text-xs">{r.roomName}</p>
+                              <p className="text-[10px] text-slate-500">Max {r.maxGuests} Guests • {r.bedType} • {r.roomSize || '250 sq ft'}</p>
                             </div>
-                            <div className="text-right">
-                              <p className="font-extrabold text-xs text-emerald-600 dark:text-emerald-400">
-                                ₹{r.discountPrice || r.pricePerNight}/night
-                              </p>
-                              <button
-                                onClick={() => store.deleteRoomType(r.id)}
-                                className="text-[10px] text-rose-500 hover:underline"
-                              >
-                                Delete
-                              </button>
+                            <div className="text-right shrink-0">
+                              <div className="flex items-baseline gap-1 justify-end">
+                                <span className="font-black text-xs text-emerald-600 dark:text-emerald-400">
+                                  ₹{r.discountPrice || r.pricePerNight}
+                                </span>
+                                {r.discountPrice && r.discountPrice < r.pricePerNight && (
+                                  <span className="text-[10px] text-slate-400 line-through">
+                                    ₹{r.pricePerNight}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-500">/night</span>
+                              </div>
+
+                              <div className="flex items-center gap-2 justify-end mt-1">
+                                <button
+                                  onClick={() => handleOpenEditRoom(property.id, r)}
+                                  className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-0.5"
+                                >
+                                  <Edit3 className="w-3 h-3" /> Edit Price
+                                </button>
+                                <span className="text-slate-300">•</span>
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Delete room "${r.roomName}"?`)) {
+                                      store.deleteRoomType(r.id);
+                                    }
+                                  }}
+                                  className="text-[10px] text-rose-500 hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -941,6 +1035,82 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                 />
               </div>
 
+              {/* Room Type & Pricing Setup Section (For new or existing listings) */}
+              {!editingPropertyId && (
+                <div className="bg-emerald-50/60 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-300 dark:border-emerald-700/80 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <BedDouble className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                      Initial Room Type & Nightly Price Setup
+                    </h4>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Room Type Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Traditional Bamboo Stilt (Chang Ghar) Suite"
+                      value={roomName}
+                      onChange={(e) => setRoomName(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Price / Night (₹) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={pricePerNight}
+                        onChange={(e) => setPricePerNight(parseInt(e.target.value) || 1000)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Discount Price / Night (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={discountPrice}
+                        onChange={(e) => setDiscountPrice(parseInt(e.target.value) || 0)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-600 dark:text-emerald-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Max Guests</label>
+                      <input
+                        type="number"
+                        value={maxGuests}
+                        onChange={(e) => setMaxGuests(parseInt(e.target.value) || 2)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Bed Type</label>
+                      <input
+                        type="text"
+                        value={bedType}
+                        onChange={(e) => setBedType(e.target.value)}
+                        placeholder="e.g. King Bed"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
@@ -962,53 +1132,56 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         </div>
       )}
 
-      {/* Modal: Manage Room Types for Property */}
+      {/* Modal: Manage Room Types & Prices for Property */}
       {editingRoomsPropId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 relative my-8">
             <button
-              onClick={() => setEditingRoomsPropId(null)}
-              className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-600 rounded-full"
+              onClick={() => {
+                setEditingRoomsPropId(null);
+                setEditingRoomId(null);
+              }}
+              className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="text-lg font-black text-slate-900 dark:text-white mb-4">
-              Add Room Type
+              {editingRoomId ? 'Edit Room Type & Pricing' : 'Add New Room Type & Pricing'}
             </h3>
 
-            <form onSubmit={handleAddRoomType} className="space-y-3">
+            <form onSubmit={handleSaveRoomType} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Room Name</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Room Type Name <span className="text-rose-500">*</span></label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Deluxe Balcony Room"
+                  placeholder="e.g. Traditional Bamboo Stilt (Chang Ghar) Suite"
                   value={roomName}
                   onChange={(e) => setRoomName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Price per Night (₹)</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Original Price / Night (₹) <span className="text-rose-500">*</span></label>
                   <input
                     type="number"
                     required
                     value={pricePerNight}
                     onChange={(e) => setPricePerNight(parseInt(e.target.value) || 1000)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Discount Price (₹)</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Discount Price / Night (₹)</label>
                   <input
                     type="number"
                     value={discountPrice}
                     onChange={(e) => setDiscountPrice(parseInt(e.target.value) || 0)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-600 dark:text-emerald-400"
                   />
                 </div>
               </div>
@@ -1020,16 +1193,17 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                     type="number"
                     value={maxGuests}
                     onChange={(e) => setMaxGuests(parseInt(e.target.value) || 2)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Size</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Room Size</label>
                   <input
                     type="text"
                     value={roomSize}
                     onChange={(e) => setRoomSize(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                    placeholder="e.g. 300 sq.ft."
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
@@ -1038,7 +1212,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                     type="text"
                     value={bedType}
                     onChange={(e) => setBedType(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                    placeholder="e.g. King Bed"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
@@ -1049,7 +1224,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                   type="text"
                   value={roomDescription}
                   onChange={(e) => setRoomDescription(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                  placeholder="e.g. Authentic wooden stay with tea garden views & hot water..."
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
@@ -1059,23 +1235,27 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                   type="text"
                   value={roomAmenities}
                   onChange={(e) => setRoomAmenities(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none"
+                  placeholder="WiFi, Geyser, Balcony, Tea Kettle, Bukhari Heater"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-3 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setEditingRoomsPropId(null)}
-                  className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs px-4 py-2 rounded-xl"
+                  onClick={() => {
+                    setEditingRoomsPropId(null);
+                    setEditingRoomId(null);
+                  }}
+                  className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-slate-200"
                 >
-                  Done
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-5 py-2 rounded-xl"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md"
                 >
-                  Add Room
+                  {editingRoomId ? 'Save Room & Price Updates' : 'Add Room & Set Price'}
                 </button>
               </div>
 

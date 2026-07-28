@@ -49,6 +49,8 @@ export function App() {
     }
   }, [isDark]);
 
+  const [autoOpenAddProperty, setAutoOpenAddProperty] = useState<boolean>(false);
+
   const handleSelectProperty = (prop: Property) => {
     setSelectedProperty(prop);
     setCurrentView('property-detail');
@@ -86,6 +88,7 @@ export function App() {
           onOpenAddProperty={() => {
             setCurrentRole('owner');
             setCurrentView('home');
+            setAutoOpenAddProperty(true);
           }}
           onSelectCity={setSelectedCity}
           selectedCity={selectedCity}
@@ -114,6 +117,8 @@ export function App() {
           {currentRole === 'owner' && (
             <OwnerDashboardView
               onSelectProperty={handleSelectProperty}
+              autoOpenAddProperty={autoOpenAddProperty}
+              onAddPropertyHandled={() => setAutoOpenAddProperty(false)}
             />
           )}
 
