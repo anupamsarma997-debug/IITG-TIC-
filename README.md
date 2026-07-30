@@ -4,6 +4,14 @@
 
 ---
 
+## 🔗 Live Links & Demo
+
+* 🌐 **Live Website:** [https://thikana.app](https://thikana.app)
+* 💻 **GitHub Repository:** [https://github.com/anupamsarma/thikana-marketplace](https://github.com/anupamsarma/thikana-marketplace)
+* 📹 **30-Second Demo Video:** [Watch Walkthrough](#) *(Available upon request)*
+
+---
+
 ## 🌟 Executive Overview & Pitch
 
 Traditional hotel aggregation platforms charge independent homestays and boutique hotel owners high commission fees (ranging from **18% to 30%**), while restricting direct guest-host communication and forcing complex payment gateway settlements. 
@@ -15,6 +23,17 @@ Traditional hotel aggregation platforms charge independent homestays and boutiqu
 ## 🏗️ Technical Architecture & Stack
 
 THIKANA is engineered as a modern, high-performance full-stack web application built on Node.js, Express, React 19, and Google Cloud Infrastructure.
+
+### 🔄 End-to-End Booking Flow Diagram
+
+```
+┌───────────┐        ┌──────────────────┐        ┌───────────────────┐        ┌────────────────────┐        ┌──────────┐
+│  Customer │ ───►   │ THIKANA Platform │ ───►   │ Firebase Backend  │ ───►   │ WhatsApp Gateway   │ ───►   │   Host   │
+│ (Guest)   │        │ (React 19 + AI)  │        │ (Auth & Database) │        │ (Direct API Link)  │        │ (Owner)  │
+└───────────┘        └──────────────────┘        └───────────────────┘        └────────────────────┘        └──────────┘
+```
+
+### ⚡ Technical Components
 
 ```
                   ┌─────────────────────────────────────────────────────────┐
@@ -62,6 +81,16 @@ THIKANA is engineered as a modern, high-performance full-stack web application b
 
 ### 5. 🗺️ Interactive Google Maps Location Finder (`MapLocationView.tsx`)
 * Live embedded view with custom pin markers, direct directions link, and distance indicators.
+
+---
+
+## 🗺️ Product Roadmap
+
+- [x] **MVP Release** — Zero-commission listing, WhatsApp booking engine, and multi-role dashboard
+- [ ] **Real Host Onboarding** — Target 100+ verified homestays across Assam, Meghalaya & Northeast
+- [ ] **Online Payments Integration** — Direct UPI & QR instant deposit settlement options
+- [ ] **Advanced AI Trip Planner** — Multi-day route mapping with Gemini 2.5 Flash integration
+- [ ] **Native Mobile Application** — iOS & Android companion app for property owners
 
 ---
 
@@ -127,7 +156,7 @@ thikana-marketplace/
 
 1. **Clone Repository & Install Dependencies:**
    ```bash
-   git clone https://github.com/your-username/thikana-marketplace.git
+   git clone https://github.com/anupamsarma/thikana-marketplace.git
    cd thikana-marketplace
    npm install
    ```
@@ -163,8 +192,9 @@ thikana-marketplace/
 
 ---
 
-## 📄 License & Attribution
+## 🔒 Copyright & Rights
 
-Designed and developed for **THIKANA Marketplace**. All rights reserved.
+© 2026 Anupam Sarma. All Rights Reserved.
 
-© 2026 Anupam Sarma. All rights reserved. This repository is shared for demonstration purposes only. Unauthorized copying, redistribution, or commercial use is prohibited without written permission.
+This repository is shared only for demonstration and evaluation purposes. No part of this source code may be copied, redistributed, modified, or used commercially without written permission from the author.
+
