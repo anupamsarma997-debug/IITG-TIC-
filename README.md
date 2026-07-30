@@ -166,3 +166,5 @@ thikana-marketplace/
 ## 📄 License & Attribution
 
 Designed and developed for **THIKANA Marketplace**. All rights reserved.
+
+© 2026 Anupam Sarma. All rights reserved. This repository is shared for demonstration purposes only. Unauthorized copying, redistribution, or commercial use is prohibited without written permission.
