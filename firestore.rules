@@ -16,29 +16,25 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Properties Collection: Publicly readable; hosts can create & manage their own listings
+    // Properties Collection: Publicly readable; authentic hosts manage their own listings
     match /properties/{propertyId} {
       allow read: if true;
-      allow create: if isSignedIn() && (
-        !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid
-      );
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isSignedIn() && (
         !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
       );
     }
 
-    // Rooms Collection: Publicly readable; hosts can manage room inventory for their properties
+    // Rooms Collection: Publicly readable; authentic hosts manage their room inventory
     match /rooms/{roomId} {
       allow read: if true;
-      allow create: if isSignedIn() && (
-        !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid
-      );
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isSignedIn() && (
         !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
       );
     }
 
-    // Booking Enquiries Collection: Guests can create; host & guest access isolation
+    // Booking Enquiries Collection: Guests can submit enquiries; host & guest isolation for management
     match /enquiries/{enquiryId} {
       allow create: if true;
       allow read, update, delete: if isSignedIn() && (
@@ -50,9 +46,7 @@ service cloud.firestore {
     // Banners Collection: Publicly readable; advertisers manage their own campaigns
     match /banners/{bannerId} {
       allow read: if true;
-      allow create: if isSignedIn() && (
-        !('advertiserUid' in request.resource.data) || request.resource.data.advertiserUid == request.auth.uid
-      );
+      allow create: if isSignedIn() && request.resource.data.advertiserUid == request.auth.uid;
       allow update, delete: if isSignedIn() && (
         !('advertiserUid' in resource.data) || resource.data.advertiserUid == request.auth.uid
       );
