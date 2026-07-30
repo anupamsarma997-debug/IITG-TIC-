@@ -132,6 +132,7 @@ function sanitizeUserForFirestore(user: User) {
     username: user.username || '',
     email: user.email || '',
     googleEmail: user.googleEmail || '',
+    googleUid: user.googleUid || '',
     phone: user.phone || '',
     whatsapp: user.whatsapp || '',
     role: user.role || 'customer',
@@ -359,12 +360,14 @@ class DataStore {
     const q = googleData.email.trim().toLowerCase();
     let found = this.users.find(
       (u) =>
+        (googleData.uid && (u.googleUid === googleData.uid || u.id === `google_${googleData.uid}`)) ||
         (u.googleEmail && u.googleEmail.toLowerCase() === q) ||
         (u.email && u.email.toLowerCase() === q)
     );
 
     if (found) {
       if (!found.googleEmail) found.googleEmail = googleData.email;
+      if (!found.googleUid && googleData.uid) found.googleUid = googleData.uid;
       this.currentUserId = found.id;
       setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) =>
         console.warn('Firestore sync user error:', err)
@@ -393,6 +396,7 @@ class DataStore {
       username: baseUsername || 'user_' + Math.floor(1000 + Math.random() * 9000),
       email: googleData.email,
       googleEmail: googleData.email,
+      googleUid: googleData.uid,
       passwordHash: hashPassword('google_auth_user'),
       phone: '',
       whatsapp: '',
@@ -411,6 +415,13 @@ class DataStore {
     return newUser;
   }
 
+  public findUserByGoogleUid(uid: string): User | undefined {
+    if (!uid) return undefined;
+    return this.users.find(
+      (u) => u.googleUid === uid || u.id === `google_${uid}`
+    );
+  }
+
   public getCurrentUser(): User | undefined {
     return this.users.find((u) => u.id === this.currentUserId);
   }
@@ -425,7 +436,7 @@ class DataStore {
     this.notify();
   }
 
-  public registerUser(user: Omit<User, 'id' | 'createdAt' | 'status'> & { username?: string; password?: string; googleEmail?: string }): User {
+  public registerUser(user: Omit<User, 'id' | 'createdAt' | 'status'> & { username?: string; password?: string; googleEmail?: string; googleUid?: string }): User {
     // Prevent self-promotion to admin unless created by an existing logged-in admin
     let assignedRole: UserRole = user.role || 'owner';
     if (assignedRole === 'admin') {
@@ -444,6 +455,7 @@ class DataStore {
       passwordSalt: pwd ? salt : undefined,
       passwordHash: pwd ? hashPasswordWithSalt(pwd, salt) : undefined,
       googleEmail: user.googleEmail || user.email,
+      googleUid: user.googleUid,
       id: 'user_' + Date.now(),
       status: 'active',
       createdAt: new Date().toISOString(),
@@ -553,6 +565,35 @@ class DataStore {
     }
     if (!found.googleEmail) {
       found.googleEmail = googleEmailInput.trim();
+    }
+
+    // Clear any failed login locks
+    if (found.username) this.failedLoginAttempts.delete(found.username.toLowerCase());
+    if (found.email) this.failedLoginAttempts.delete(found.email.toLowerCase());
+
+    this.currentUserId = found.id;
+    setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
+    syncPublicProfile(found);
+    this.notify();
+    return { success: true, user: found, message: `Password reset successfully for @${found.username || found.name}! You are now logged in.` };
+  }
+
+  public resetPasswordAfterGoogleVerification(userId: string, newPassword: string, newUsername?: string): { success: boolean; user?: User; message?: string } {
+    const found = this.users.find((u) => u.id === userId);
+    if (!found) {
+      return {
+        success: false,
+        message: 'No matching user account found.',
+      };
+    }
+
+    const salt = generateSalt();
+    found.passwordSalt = salt;
+    found.passwordHash = hashPasswordWithSalt(newPassword, salt);
+    delete found.password;
+
+    if (newUsername && newUsername.trim().length > 0) {
+      found.username = newUsername.trim();
     }
 
     // Clear any failed login locks

@@ -8,6 +8,7 @@ export interface User {
   passwordHash?: string;
   passwordSalt?: string;
   googleEmail?: string;
+  googleUid?: string;
   email: string;
   phone: string;
   whatsapp: string;
