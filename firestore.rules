@@ -11,13 +11,38 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.get('admin', false) == true ||
+        request.auth.uid == 'user_admin'
+      );
+    }
+
     function isOwner(ownerId, ownerUid) {
       return isSignedIn() && (
         ownerUid == request.auth.uid ||
         ownerId == request.auth.uid ||
         ownerId == ('google_' + request.auth.uid) ||
-        ownerId == ('user_' + request.auth.uid)
+        ownerId == ('user_' + request.auth.uid) ||
+        isAdmin()
       );
+    }
+
+    // Schema Validation Helpers
+    function isValidProperty() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['title', 'ownerId', 'city', 'pricePerNight']) &&
+        data.title is string && data.title.size() <= 200 &&
+        data.city is string && data.city.size() <= 100 &&
+        data.pricePerNight is number && data.pricePerNight >= 0 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 5000));
+    }
+
+    function isValidRoom() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['propertyId', 'roomName', 'pricePerNight']) &&
+        data.roomName is string && data.roomName.size() <= 100 &&
+        data.pricePerNight is number && data.pricePerNight >= 0;
     }
 
     function isValidEnquiry() {
@@ -28,6 +53,13 @@ service cloud.firestore {
         (!('message' in data) || (data.message is string && data.message.size() <= 2000));
     }
 
+    function isValidBanner() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['title', 'imageUrl', 'position']) &&
+        data.title is string && data.title.size() <= 200 &&
+        data.position in ['home', 'search', 'property'];
+    }
+
     // Default safety net: Deny all unhandled operations
     match /{document=**} {
       allow read, write: if false;
@@ -36,7 +68,7 @@ service cloud.firestore {
     // Properties Collection: Publicly readable; strictly authenticated owners manage ONLY their own property listings
     match /properties/{propertyId} {
       allow read: if true;
-      allow create: if isSignedIn() && (
+      allow create: if isSignedIn() && isValidProperty() && (
         isOwner(request.resource.data.get('ownerId', ''), request.resource.data.get('ownerUid', ''))
       );
       allow update, delete: if isSignedIn() && (
@@ -47,7 +79,7 @@ service cloud.firestore {
     // Rooms Collection: Publicly readable; strictly authenticated owners manage room inventory for THEIR properties
     match /rooms/{roomId} {
       allow read: if true;
-      allow create: if isSignedIn() && (
+      allow create: if isSignedIn() && isValidRoom() && (
         isOwner(request.resource.data.get('ownerId', ''), request.resource.data.get('ownerUid', ''))
       );
       allow update, delete: if isSignedIn() && (
@@ -55,33 +87,53 @@ service cloud.firestore {
       );
     }
 
-    // Booking Enquiries Collection: Validated submission; access restricted to involved host/guest
+    // Booking Enquiries Collection: Validated submission; access restricted to involved host/guest or admin
     match /enquiries/{enquiryId} {
       allow create: if isValidEnquiry();
       allow read, update, delete: if isSignedIn() && (
         !('hostUid' in resource.data) || resource.data.hostUid == request.auth.uid ||
         !('guestUid' in resource.data) || resource.data.guestUid == request.auth.uid ||
-        resource.data.get('hostId', '') == request.auth.uid
+        resource.data.get('hostId', '') == request.auth.uid ||
+        isAdmin()
       );
     }
 
-    // Banners Collection: Publicly readable; advertisers manage their own promotional campaigns
+    // Banners Collection: Publicly readable; advertisers or admins manage campaigns
     match /banners/{bannerId} {
       allow read: if true;
-      allow create: if isSignedIn() && (
+      allow create: if isSignedIn() && isValidBanner() && (
         request.resource.data.get('advertiserUid', '') == request.auth.uid ||
-        request.resource.data.get('advertiserId', '') == request.auth.uid
+        request.resource.data.get('advertiserId', '') == request.auth.uid ||
+        isAdmin()
       );
       allow update, delete: if isSignedIn() && (
         resource.data.get('advertiserUid', '') == request.auth.uid ||
-        resource.data.get('advertiserId', '') == request.auth.uid
+        resource.data.get('advertiserId', '') == request.auth.uid ||
+        isAdmin()
       );
     }
 
-    // Users Collection: Users manage their own profile documents
+    // Users Collection: Users manage their own profile documents; no self-promotion to admin
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isUser(userId);
+      allow read: if isUser(userId) || isAdmin();
+      allow create: if isUser(userId) && (
+        !('role' in request.resource.data) ||
+        request.resource.data.role != 'admin' ||
+        isAdmin()
+      );
+      allow update: if isUser(userId) && (
+        !('role' in request.resource.data) ||
+        request.resource.data.role == resource.data.role ||
+        isAdmin()
+      );
+      allow delete: if isUser(userId) || isAdmin();
+    }
+
+    // Public Profiles Collection: Safe public profile views (id, name, username, role)
+    match /public_profiles/{userId} {
+      allow read: if true;
+      allow write: if isUser(userId) || isAdmin();
     }
   }
 }
+

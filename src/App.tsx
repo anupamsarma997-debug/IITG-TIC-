@@ -80,6 +80,14 @@ export function App() {
         <Navbar
           currentRole={currentRole}
           onRoleChange={(role) => {
+            if (role === 'admin') {
+              const user = store.getCurrentUser();
+              if (!user || user.role !== 'admin') {
+                alert('Access Denied: You must be signed in with an Admin account to access the Admin Panel.');
+                setIsAuthOpen(true);
+                return;
+              }
+            }
             setCurrentRole(role);
             setCurrentView('home');
           }}
@@ -123,13 +131,30 @@ export function App() {
           )}
 
           {currentRole === 'admin' && (
-            <AdminDashboardView />
+            store.getCurrentUser()?.role === 'admin' ? (
+              <AdminDashboardView />
+            ) : (
+              <CustomerHomeView
+                onSelectProperty={handleSelectProperty}
+                onOpenWhatsApp={handleOpenWhatsApp}
+                onSelectCity={setSelectedCity}
+                selectedCity={selectedCity}
+              />
+            )
           )}
         </main>
 
         {/* Footer */}
         <Footer
           onRoleChange={(role) => {
+            if (role === 'admin') {
+              const user = store.getCurrentUser();
+              if (!user || user.role !== 'admin') {
+                alert('Access Denied: You must be signed in with an Admin account to access the Admin Panel.');
+                setIsAuthOpen(true);
+                return;
+              }
+            }
             setCurrentRole(role);
             setCurrentView('home');
           }}

@@ -151,17 +151,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Building2 className="w-3.5 h-3.5" />
               Owner Panel
             </button>
-            <button
-              onClick={() => onRoleChange('admin')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                currentRole === 'admin'
-                  ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Admin Panel
-            </button>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => onRoleChange('admin')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  currentRole === 'admin'
+                    ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Admin Panel
+              </button>
+            )}
           </div>
 
           {/* Action Tools & User Menu */}
@@ -253,7 +255,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 space-y-3">
           <div className="flex flex-col gap-1.5">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Switch Portal</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid ${user?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
               <button
                 onClick={() => { onRoleChange('customer'); setMobileMenuOpen(false); }}
                 className={`px-2 py-1.5 text-center text-xs font-medium rounded-lg ${currentRole === 'customer' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800'}`}
@@ -266,12 +268,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 Owner
               </button>
-              <button
-                onClick={() => { onRoleChange('admin'); setMobileMenuOpen(false); }}
-                className={`px-2 py-1.5 text-center text-xs font-medium rounded-lg ${currentRole === 'admin' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800'}`}
-              >
-                Admin
-              </button>
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => { onRoleChange('admin'); setMobileMenuOpen(false); }}
+                  className={`px-2 py-1.5 text-center text-xs font-medium rounded-lg ${currentRole === 'admin' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800'}`}
+                >
+                  Admin
+                </button>
+              )}
             </div>
           </div>
 

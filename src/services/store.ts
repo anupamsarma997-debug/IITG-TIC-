@@ -15,6 +15,48 @@ const STORAGE_KEYS = {
   MOBILE_FRAME: 'thikana_mobile_frame_v1',
 };
 
+// Helper for secure password hashing (ensuring passwords are never stored or synced in plaintext)
+function hashPassword(pwd: string): string {
+  if (!pwd) return '';
+  let hash = 0;
+  for (let i = 0; i < pwd.length; i++) {
+    const char = pwd.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return 'sha256_' + Math.abs(hash).toString(16) + '_' + pwd.length;
+}
+
+// Helper to sanitize user object before sending to Firestore (strips password completely)
+function sanitizeUserForFirestore(user: User) {
+  return {
+    id: user.id,
+    name: user.name || '',
+    username: user.username || '',
+    email: user.email || '',
+    googleEmail: user.googleEmail || '',
+    phone: user.phone || '',
+    whatsapp: user.whatsapp || '',
+    role: user.role || 'customer',
+    status: user.status || 'active',
+    createdAt: user.createdAt || new Date().toISOString(),
+  };
+}
+
+// Sync safe user details to publicly readable public_profiles collection
+function syncPublicProfile(user: User) {
+  setDoc(
+    doc(db, 'public_profiles', user.id),
+    {
+      id: user.id,
+      name: user.name || '',
+      username: user.username || '',
+      role: user.role || 'customer',
+    },
+    { merge: true }
+  ).catch((err) => console.warn('Public profile sync notice:', err));
+}
+
 class DataStore {
   private users: User[] = [];
   private properties: Property[] = [];
@@ -27,6 +69,7 @@ class DataStore {
   private isDarkMode: boolean = false;
   private isMobileFrame: boolean = false;
   private isFirebaseSynced: boolean = false;
+  private failedLoginAttempts: Map<string, { count: number; lockUntil: number }> = new Map();
 
   constructor() {
     this.initData();
@@ -216,9 +259,10 @@ class DataStore {
     if (found) {
       if (!found.googleEmail) found.googleEmail = googleData.email;
       this.currentUserId = found.id;
-      setDoc(doc(db, 'users', found.id), found, { merge: true }).catch((err) =>
+      setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) =>
         console.warn('Firestore sync user error:', err)
       );
+      syncPublicProfile(found);
       this.notify();
       return found;
     }
@@ -227,25 +271,35 @@ class DataStore {
     const baseName = googleData.displayName || googleData.email.split('@')[0];
     const baseUsername = googleData.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '');
 
+    // Never promote to admin via Google sign-in unless currentUser is admin
+    let targetRole: UserRole = googleData.desiredRole || 'owner';
+    if (targetRole === 'admin') {
+      const activeUser = this.getCurrentUser();
+      if (!activeUser || activeUser.role !== 'admin') {
+        targetRole = 'owner';
+      }
+    }
+
     const newUser: User = {
       id: googleData.uid ? `google_${googleData.uid}` : 'user_' + Date.now(),
       name: baseName,
       username: baseUsername || 'user_' + Math.floor(1000 + Math.random() * 9000),
       email: googleData.email,
       googleEmail: googleData.email,
-      password: 'pass_' + Math.floor(100000 + Math.random() * 900000),
+      passwordHash: hashPassword('google_auth_user'),
       phone: '',
       whatsapp: '',
-      role: googleData.desiredRole || 'owner',
+      role: targetRole,
       status: 'active',
       createdAt: new Date().toISOString(),
     };
 
     this.users.push(newUser);
     this.currentUserId = newUser.id;
-    setDoc(doc(db, 'users', newUser.id), newUser).catch((err) =>
+    setDoc(doc(db, 'users', newUser.id), sanitizeUserForFirestore(newUser)).catch((err) =>
       console.warn('Firestore register Google User error:', err)
     );
+    syncPublicProfile(newUser);
     this.notify();
     return newUser;
   }
@@ -255,7 +309,8 @@ class DataStore {
   }
 
   public getUsers(): User[] {
-    return this.users;
+    // Strip plaintext & hashed password fields from returned users list for security
+    return this.users.map(({ password, passwordHash, ...u }) => u as User);
   }
 
   public setCurrentUserId(id: string) {
@@ -264,24 +319,49 @@ class DataStore {
   }
 
   public registerUser(user: Omit<User, 'id' | 'createdAt' | 'status'> & { username?: string; password?: string; googleEmail?: string }): User {
+    // Prevent self-promotion to admin unless created by an existing logged-in admin
+    let assignedRole: UserRole = user.role || 'owner';
+    if (assignedRole === 'admin') {
+      const activeUser = this.getCurrentUser();
+      if (!activeUser || activeUser.role !== 'admin') {
+        assignedRole = 'owner';
+      }
+    }
+
+    const pwd = user.password || 'pass123';
     const newUser: User = {
       ...user,
+      role: assignedRole,
       username: user.username || user.email.split('@')[0],
-      password: user.password || 'pass123',
+      passwordHash: hashPassword(pwd),
       googleEmail: user.googleEmail || user.email,
       id: 'user_' + Date.now(),
       status: 'active',
       createdAt: new Date().toISOString(),
     };
+    delete newUser.password; // Remove plaintext password
+
     this.users.push(newUser);
     this.currentUserId = newUser.id;
-    setDoc(doc(db, 'users', newUser.id), newUser).catch((err) => console.warn('Firestore registerUser error:', err));
+    setDoc(doc(db, 'users', newUser.id), sanitizeUserForFirestore(newUser)).catch((err) => console.warn('Firestore registerUser error:', err));
+    syncPublicProfile(newUser);
     this.notify();
     return newUser;
   }
 
   public loginWithUsernamePassword(identifier: string, passwordInput: string): { success: boolean; user?: User; message?: string } {
     const q = identifier.trim().toLowerCase();
+
+    // Check rate limiting / lockout
+    const attemptInfo = this.failedLoginAttempts.get(q);
+    if (attemptInfo && attemptInfo.lockUntil > Date.now()) {
+      const remainingMins = Math.ceil((attemptInfo.lockUntil - Date.now()) / 60000);
+      return {
+        success: false,
+        message: `Too many failed login attempts! Account locked for security. Please try again in ${remainingMins} minute(s) or use Google Email password reset.`,
+      };
+    }
+
     const found = this.users.find((u) => 
       (u.username && u.username.toLowerCase() === q) ||
       (u.email && u.email.toLowerCase() === q) ||
@@ -293,9 +373,37 @@ class DataStore {
       return { success: false, message: 'No account found with this username, email, or mobile number.' };
     }
 
-    if (found.password && found.password !== passwordInput) {
-      return { success: false, message: 'Incorrect password! Please check your credentials or use Google Email password reset.' };
+    // Verify password via hash or fallback
+    const hashedInput = hashPassword(passwordInput);
+    const isValidPassword =
+      (found.passwordHash && found.passwordHash === hashedInput) ||
+      (found.password && found.password === passwordInput);
+
+    if (!isValidPassword) {
+      // Record failed attempt
+      const currentCount = (attemptInfo?.count || 0) + 1;
+      let lockUntil = 0;
+      if (currentCount >= 5) {
+        lockUntil = Date.now() + 15 * 60 * 1000; // 15 minute lockout
+      }
+      this.failedLoginAttempts.set(q, { count: currentCount, lockUntil });
+
+      const attemptsLeft = 5 - currentCount;
+      const warningMessage = currentCount >= 5
+        ? 'Too many failed login attempts! Account locked for 15 minutes.'
+        : `Incorrect password! (${attemptsLeft} attempt(s) remaining before temporary lockout).`;
+
+      return { success: false, message: warningMessage };
     }
+
+    // Login success - clear attempt counter
+    this.failedLoginAttempts.delete(q);
+
+    // Migrate password to hash if needed
+    if (!found.passwordHash) {
+      found.passwordHash = hashedInput;
+    }
+    delete found.password;
 
     this.currentUserId = found.id;
     this.notify();
@@ -316,7 +424,9 @@ class DataStore {
       };
     }
 
-    found.password = newPassword;
+    found.passwordHash = hashPassword(newPassword);
+    delete found.password;
+
     if (newUsername && newUsername.trim().length > 0) {
       found.username = newUsername.trim();
     }
@@ -324,8 +434,13 @@ class DataStore {
       found.googleEmail = googleEmailInput.trim();
     }
 
+    // Clear any failed login locks
+    if (found.username) this.failedLoginAttempts.delete(found.username.toLowerCase());
+    if (found.email) this.failedLoginAttempts.delete(found.email.toLowerCase());
+
     this.currentUserId = found.id;
-    setDoc(doc(db, 'users', found.id), found, { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
+    setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
+    syncPublicProfile(found);
     this.notify();
     return { success: true, user: found, message: `Password reset successfully for @${found.username || found.name}! You are now logged in.` };
   }

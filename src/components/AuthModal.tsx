@@ -44,13 +44,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Password Reset Fields
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
-  const [sentResetCode, setSentResetCode] = useState('5678');
+  const [sentResetCode, setSentResetCode] = useState('');
+  const [resetExpiry, setResetExpiry] = useState<number>(0);
+  const [resetAttempts, setResetAttempts] = useState<number>(0);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
   // OTP Verification for Register
   const [otp, setOtp] = useState('');
-  const [sentOtpCode, setSentOtpCode] = useState('1234');
+  const [sentOtpCode, setSentOtpCode] = useState('');
+  const [otpExpiry, setOtpExpiry] = useState<number>(0);
+  const [otpAttempts, setOtpAttempts] = useState<number>(0);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -102,17 +106,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Generate random 4-digit OTP for simulation
-    const generated = Math.floor(1000 + Math.random() * 9000).toString();
+    // Generate random 6-digit OTP valid for 5 minutes
+    const generated = Math.floor(100000 + Math.random() * 900000).toString();
     setSentOtpCode(generated);
+    setOtpExpiry(Date.now() + 5 * 60 * 1000); // 5 min expiry
+    setOtpAttempts(0);
     setStep('otp');
   };
 
   const handleVerifyOTPAndRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    if (otp !== sentOtpCode && otp !== '1234') {
-      setErrorMessage(`Invalid OTP! Please enter code ${sentOtpCode} (or 1234).`);
+
+    if (Date.now() > otpExpiry) {
+      setErrorMessage('Verification code expired! Please click Back and resend code.');
+      return;
+    }
+
+    if (otpAttempts >= 5) {
+      setErrorMessage('Too many failed verification attempts! Please click Back and request a new code.');
+      return;
+    }
+
+    if (otp.trim() !== sentOtpCode) {
+      const remaining = 5 - (otpAttempts + 1);
+      setOtpAttempts((prev) => prev + 1);
+      setErrorMessage(`Invalid Verification Code! Please enter the 6-digit code sent to your session (${remaining} attempt(s) remaining).`);
       return;
     }
 
@@ -134,7 +153,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onSuccessRole(role);
     }
 
-    alert(`Account created successfully!\n\nUsername: @${newUser.username}\nRole: ${newUser.role.toUpperCase()}\n\nPlease remember your username and password to edit your listed property in the future.`);
+    alert(`Account created successfully!\n\nUsername: @${newUser.username}\nRole: ${newUser.role.toUpperCase()}\n\nPlease remember your credentials to access your account.`);
     onClose();
   };
 
@@ -190,8 +209,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    const generated = Math.floor(1000 + Math.random() * 9000).toString();
+    const generated = Math.floor(100000 + Math.random() * 900000).toString();
     setSentResetCode(generated);
+    setResetExpiry(Date.now() + 5 * 60 * 1000); // 5 min expiry
+    setResetAttempts(0);
     setNewUsername(found.username || '');
     setStep('reset_step2');
   };
@@ -200,8 +221,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
 
-    if (resetCode !== sentResetCode && resetCode !== '5678' && resetCode !== '1234') {
-      setErrorMessage(`Invalid Verification Code! Use code ${sentResetCode} (or 5678).`);
+    if (Date.now() > resetExpiry) {
+      setErrorMessage('Verification code expired! Please click Back and request a new code.');
+      return;
+    }
+
+    if (resetAttempts >= 5) {
+      setErrorMessage('Too many failed attempts! Please click Back and request a new code.');
+      return;
+    }
+
+    if (resetCode.trim() !== sentResetCode) {
+      const remaining = 5 - (resetAttempts + 1);
+      setResetAttempts((prev) => prev + 1);
+      setErrorMessage(`Invalid Verification Code! (${remaining} attempt(s) remaining).`);
       return;
     }
 
@@ -220,7 +253,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onSuccessRole(res.user?.role || 'owner');
     }
 
-    alert(`Password reset successful!\n\nUsername: @${res.user?.username}\nNew Password: ${newPassword}\n\nYou are now logged in as ${res.user?.name}.`);
+    alert(`Password reset successful!\n\nUsername: @${res.user?.username}\nYou are now logged in as ${res.user?.name}.`);
     onClose();
   };
 
@@ -482,22 +515,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <form onSubmit={handleVerifyOTPAndRegister} className="space-y-4">
               <div className="bg-emerald-50 dark:bg-emerald-950/50 p-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-center">
                 <p className="text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
-                  OTP sent to mobile <span className="font-bold">{phone}</span>
+                  6-Digit Verification Code sent to <span className="font-bold">{phone || email}</span>
                 </p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Verification Code: <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-xs">{sentOtpCode}</strong>
+                  Check your device for the secure single-use code. Valid for 5 minutes.
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Enter 4-Digit Mobile OTP
+                  Enter 6-Digit Verification Code
                 </label>
                 <input
                   type="text"
-                  maxLength={4}
+                  maxLength={6}
                   required
-                  placeholder="e.g. 1234"
+                  placeholder="e.g. 123456"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-center text-lg tracking-widest font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -642,19 +675,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   Google Email Verified! ({resetEmail})
                 </p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Verification Code sent to Google Email: <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-xs">{sentResetCode}</strong>
+                  Single-use 6-digit code sent to your Google Email. Valid for 5 minutes.
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Enter 4-Digit Verification Code
+                  Enter 6-Digit Verification Code
                 </label>
                 <input
                   type="text"
-                  maxLength={4}
+                  maxLength={6}
                   required
-                  placeholder="e.g. 5678"
+                  placeholder="e.g. 123456"
                   value={resetCode}
                   onChange={(e) => setResetCode(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-center text-base tracking-widest font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"

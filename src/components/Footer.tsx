@@ -1,6 +1,7 @@
 import React from 'react';
 import { UserRole } from '../types';
-import { Building2, MessageCircle, ShieldCheck, Heart, Sparkles } from 'lucide-react';
+import { Building2, MessageCircle, ShieldCheck } from 'lucide-react';
+import { store } from '../services/store';
 
 interface FooterProps {
   onRoleChange: (role: UserRole) => void;
@@ -8,6 +9,7 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ onRoleChange, onOpenAddProperty }) => {
+  const currentUser = store.getCurrentUser();
   return (
     <footer className="bg-slate-900 text-slate-300 pt-12 pb-8 border-t border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -112,15 +114,17 @@ export const Footer: React.FC<FooterProps> = ({ onRoleChange, onOpenAddProperty 
                   Owner Listing Dashboard
                 </button>
               </li>
-              <li>
-                <button
-                  onClick={() => onRoleChange('admin')}
-                  className="hover:text-emerald-400 text-slate-400 transition-colors flex items-center gap-1"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Admin Control Panel</span>
-                </button>
-              </li>
+              {currentUser?.role === 'admin' && (
+                <li>
+                  <button
+                    onClick={() => onRoleChange('admin')}
+                    className="hover:text-emerald-400 text-slate-400 transition-colors flex items-center gap-1"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Admin Control Panel</span>
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
         </div>

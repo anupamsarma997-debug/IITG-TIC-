@@ -5,6 +5,7 @@ export interface User {
   name: string;
   username?: string;
   password?: string;
+  passwordHash?: string;
   googleEmail?: string;
   email: string;
   phone: string;
