@@ -121,6 +121,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'properties' | 'subscriptions' | 'leads'>('properties');
+  const [filterMode, setFilterMode] = useState<'all' | 'my'>('all');
 
   React.useEffect(() => {
     if (autoOpenAddProperty) {
@@ -132,15 +133,20 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   }, [autoOpenAddProperty]);
 
   React.useEffect(() => {
-    return store.subscribe(() => {
-      if (currentUser) {
-        setProperties(store.getPropertiesByOwner(currentUser.id));
+    const refreshData = () => {
+      const u = store.getCurrentUser();
+      const allProps = store.getProperties();
+      if (filterMode === 'my' && u) {
+        setProperties(store.getPropertiesByOwner(u.id));
       } else {
-        setProperties(store.getProperties());
+        setProperties(allProps);
       }
       setEnquiries(store.getEnquiries());
-    });
-  }, [currentUser]);
+    };
+
+    refreshData();
+    return store.subscribe(refreshData);
+  }, [filterMode]);
 
   // Open Form to Add New Property
   const handleOpenAdd = () => {
@@ -311,7 +317,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         bedType: bedType || 'Double Bed',
       });
 
-      alert('New property and room pricing saved successfully!');
+      setFilterMode('all');
+      alert(`🎉 Property "${newProp.title}" listed & published successfully!\n\nIt is now saved in Firebase and live on the Home Page and All Listings.`);
     }
 
     setIsFormOpen(false);
@@ -466,10 +473,32 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       {/* Tab 1: Properties List */}
       {activeTab === 'properties' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              Your Listed Homestays & Hotels
-            </h3>
+          {/* Filter Sub-Tabs Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-100 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setFilterMode('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  filterMode === 'all'
+                    ? 'bg-slate-900 text-white dark:bg-emerald-500 dark:text-slate-950 shadow-sm'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                🏢 All Platform Listings ({store.getProperties().length})
+              </button>
+              {currentUser && (
+                <button
+                  onClick={() => setFilterMode('my')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                    filterMode === 'my'
+                      ? 'bg-slate-900 text-white dark:bg-emerald-500 dark:text-slate-950 shadow-sm'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  👤 My Listings ({store.getPropertiesByOwner(currentUser.id).length})
+                </button>
+              )}
+            </div>
             <span className="text-xs text-slate-500 font-semibold">
               Showing {properties.length} active property listings
             </span>
@@ -625,6 +654,23 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                             </div>
                           </div>
                         ))}
+                      </div>
+
+                      {/* Host Ownership Badge & Security Status */}
+                      <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 dark:border-slate-700/80 pt-2.5 mt-2">
+                        <span className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+                          <UserCheck className="w-3.5 h-3.5 text-blue-500" />
+                          <span>Host: {property.ownerName}</span>
+                        </span>
+                        {currentUser && store.isOwnerOfProperty(currentUser.id, property.id) ? (
+                          <span className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-lg text-[10px] font-extrabold border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Owner Logged In
+                          </span>
+                        ) : (
+                          <span className="bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-extrabold border border-amber-200 dark:border-amber-800 flex items-center gap-1" title="Login as this property's owner to edit or delete">
+                            <Lock className="w-3 h-3 text-amber-600" /> Login Required to Edit
+                          </span>
+                        )}
                       </div>
 
                     </div>
