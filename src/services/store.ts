@@ -103,8 +103,24 @@ function sha256(ascii: string): string {
   return result;
 }
 
-export function hashPassword(pwd: string): string {
+export function generateSalt(): string {
+  return Math.random().toString(36).substring(2, 12) + Date.now().toString(36);
+}
+
+export function hashPasswordWithSalt(pwd: string, salt: string, iterations = 10000): string {
   if (!pwd) return '';
+  let h = sha256(salt + pwd);
+  for (let i = 1; i < iterations; i++) {
+    h = sha256(h + salt);
+  }
+  return h;
+}
+
+export function hashPassword(pwd: string, salt?: string): string {
+  if (!pwd) return '';
+  if (salt) {
+    return hashPasswordWithSalt(pwd, salt);
+  }
   return sha256('thikana_secure_salt_2026_' + pwd);
 }
 
@@ -163,9 +179,13 @@ class DataStore {
       const rawUsers: User[] = storedUsers ? JSON.parse(storedUsers) : INITIAL_USERS;
       this.users = rawUsers.map((u) => {
         const userObj = { ...u };
-        if (!userObj.passwordHash) {
+        if (!userObj.passwordSalt) {
+          userObj.passwordSalt = generateSalt();
           const fallbackPass = (userObj as any).password || (userObj.role === 'admin' ? 'admin123' : 'pass123');
-          userObj.passwordHash = hashPassword(fallbackPass);
+          userObj.passwordHash = hashPasswordWithSalt(fallbackPass, userObj.passwordSalt);
+        } else if (!userObj.passwordHash) {
+          const fallbackPass = (userObj as any).password || (userObj.role === 'admin' ? 'admin123' : 'pass123');
+          userObj.passwordHash = hashPasswordWithSalt(fallbackPass, userObj.passwordSalt);
         }
         delete (userObj as any).password;
         return userObj;
@@ -419,11 +439,13 @@ class DataStore {
     }
 
     const pwd = user.password || 'pass123';
+    const salt = generateSalt();
     const newUser: User = {
       ...user,
       role: assignedRole,
       username: user.username || user.email.split('@')[0],
-      passwordHash: hashPassword(pwd),
+      passwordSalt: salt,
+      passwordHash: hashPasswordWithSalt(pwd, salt),
       googleEmail: user.googleEmail || user.email,
       id: 'user_' + Date.now(),
       status: 'active',
@@ -463,11 +485,18 @@ class DataStore {
       return { success: false, message: 'No account found with this username, email, or mobile number.' };
     }
 
-    // Verify password via hash or fallback
-    const hashedInput = hashPassword(passwordInput);
-    const isValidPassword =
-      (found.passwordHash && found.passwordHash === hashedInput) ||
-      (found.password && found.password === passwordInput);
+    // Verify password via user-specific salt hash or legacy hash fallback
+    let isValidPassword = false;
+    if (found.passwordSalt && found.passwordHash) {
+      const computedHash = hashPasswordWithSalt(passwordInput, found.passwordSalt);
+      isValidPassword = found.passwordHash === computedHash;
+    } else {
+      // Legacy single-round static salt hash or plaintext fallback
+      const legacyHash = hashPassword(passwordInput);
+      isValidPassword =
+        (found.passwordHash && found.passwordHash === legacyHash) ||
+        (found.password && found.password === passwordInput);
+    }
 
     if (!isValidPassword) {
       // Record failed attempt
@@ -489,9 +518,10 @@ class DataStore {
     // Login success - clear attempt counter
     this.failedLoginAttempts.delete(q);
 
-    // Migrate password to hash if needed
-    if (!found.passwordHash) {
-      found.passwordHash = hashedInput;
+    // Auto-migrate legacy user to unique per-user salt + 10,000-round hash
+    if (!found.passwordSalt) {
+      found.passwordSalt = generateSalt();
+      found.passwordHash = hashPasswordWithSalt(passwordInput, found.passwordSalt);
     }
     delete found.password;
 
@@ -514,7 +544,9 @@ class DataStore {
       };
     }
 
-    found.passwordHash = hashPassword(newPassword);
+    const salt = generateSalt();
+    found.passwordSalt = salt;
+    found.passwordHash = hashPasswordWithSalt(newPassword, salt);
     delete found.password;
 
     if (newUsername && newUsername.trim().length > 0) {

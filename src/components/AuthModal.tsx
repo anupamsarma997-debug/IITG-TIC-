@@ -597,14 +597,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </form>
           ) : (
             <form onSubmit={handleVerifyOTPAndRegister} className="space-y-4">
-              <div className="bg-emerald-50 dark:bg-emerald-950/50 p-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-center">
-                <p className="text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
-                  6-Digit Verification Code sent to <span className="font-bold">{phone || email}</span>
-                </p>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Check your device for the secure single-use code. Valid for 5 minutes.
-                </p>
-              </div>
+              {useFirebasePhoneAuth ? (
+                <div className="bg-emerald-50 dark:bg-emerald-950/50 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-center">
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
+                    📱 Firebase Phone Verification Code sent via SMS to <span className="font-bold">{phone || email}</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                    Please enter the 6-digit code received on your mobile device. Valid for 5 minutes.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 dark:bg-amber-950/50 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800 text-center space-y-1">
+                  <p className="text-xs text-amber-900 dark:text-amber-200 font-bold">
+                    ⚡ Verification Code
+                  </p>
+                  {sentOtpCode && (
+                    <div className="text-sm font-mono font-black text-amber-900 dark:text-amber-200 tracking-widest bg-amber-200/80 dark:bg-amber-900/80 py-1.5 px-4 rounded-xl inline-block my-1 border border-amber-300 dark:border-amber-700">
+                      {sentOtpCode}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
+                    Enter the code above to complete session verification. (In live production domain, SMS is delivered directly via Firebase Phone Auth).
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">

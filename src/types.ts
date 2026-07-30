@@ -6,6 +6,7 @@ export interface User {
   username?: string;
   password?: string;
   passwordHash?: string;
+  passwordSalt?: string;
   googleEmail?: string;
   email: string;
   phone: string;
