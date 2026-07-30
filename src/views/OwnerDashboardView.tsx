@@ -92,9 +92,23 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    setFormError('');
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+
+      if (!allowedTypes.includes(file.type.toLowerCase()) && !file.type.startsWith('image/')) {
+        setFormError(`⚠️ Security Alert: "${file.name}" is not a supported image file. Only JPG, PNG, and WebP images are permitted.`);
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setFormError(`⚠️ File Size Error: "${file.name}" exceeds the maximum limit of 5 MB.`);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (event) => {
         const result = event.target?.result as string;

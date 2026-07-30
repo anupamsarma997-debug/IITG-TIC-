@@ -35,19 +35,33 @@ async function startServer() {
     res.json({ status: 'ok', app: 'THIKANA Marketplace', time: new Date().toISOString() });
   });
 
+  // Input Sanitizer Helper to prevent Prompt Injection & excessive payload sizes
+  const sanitizeInput = (val: any, maxLen = 500): string => {
+    if (typeof val !== 'string') return '';
+    // Strip system control characters and limit length
+    return val.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim().slice(0, maxLen);
+  };
+
   // AI Helper 1: Generate Listing Description
   app.post('/api/ai/generate-description', async (req, res) => {
     try {
-      const { propertyName, propertyType, city, keyFeatures, amenities } = req.body;
+      const propertyName = sanitizeInput(req.body.propertyName, 100) || 'Homestay';
+      const propertyType = sanitizeInput(req.body.propertyType, 50) || 'Homestay';
+      const city = sanitizeInput(req.body.city, 100) || 'Northeast India';
+      const keyFeatures = sanitizeInput(req.body.keyFeatures, 300) || 'Cozy bamboo architecture, local ethnic cuisine, mountain/tea garden view, warm tribal hospitality';
+      const amenities = Array.isArray(req.body.amenities)
+        ? req.body.amenities.map((a: any) => sanitizeInput(a, 50)).filter(Boolean).slice(0, 15)
+        : ['WiFi', 'Hot water', 'Home cooked local meals'];
+
       const ai = getGenAI();
 
       const prompt = `You are a professional travel copywriter for "THIKANA Northeast" - a Zero Commission Homestay & Eco Lodge Marketplace in Northeast India (Seven Sisters & Sikkim).
 Write an engaging, inviting, and detailed property description (150-250 words) for:
-Property Name: ${propertyName || 'Homestay'}
-Type: ${propertyType || 'Homestay'}
-City/Location: ${city || 'Northeast India'}
-Key Features: ${keyFeatures || 'Cozy bamboo architecture, local ethnic cuisine, mountain/tea garden view, warm tribal hospitality'}
-Amenities: ${Array.isArray(amenities) ? amenities.join(', ') : 'WiFi, Hot water, Home cooked local meals'}
+Property Name: ${propertyName}
+Type: ${propertyType}
+City/Location: ${city}
+Key Features: ${keyFeatures}
+Amenities: ${amenities.join(', ')}
 
 Highlight traditional Northeast hospitality (such as Chang Ghar stilt structures, local organic tea, wood heaters/fireplaces, or ethnic thalis) and emphasize that travelers connect directly with the local host via WhatsApp with ZERO middleman commission!`;
 
@@ -66,7 +80,8 @@ Highlight traditional Northeast hospitality (such as Chang Ghar stilt structures
   // AI Helper 2: Generate Nearby Attractions
   app.post('/api/ai/nearby-attractions', async (req, res) => {
     try {
-      const { city, address } = req.body;
+      const city = sanitizeInput(req.body.city, 100);
+      const address = sanitizeInput(req.body.address, 150);
       const ai = getGenAI();
 
       const prompt = `List 4 popular nearby tourist attractions, waterfalls, national parks, tea gardens, or monasteries near "${address}, ${city}" in Northeast India.
@@ -97,14 +112,21 @@ Return ONLY a raw JSON array of 4 strings, for example: ["Kaziranga Safari Gate 
   // AI Helper 3: Travel Assistant Chat
   app.post('/api/ai/travel-assistant', async (req, res) => {
     try {
-      const { query, availableProperties } = req.body;
+      const query = sanitizeInput(req.body.query, 500);
+      const availableProperties = Array.isArray(req.body.availableProperties)
+        ? req.body.availableProperties.slice(0, 5).map((p: any) => ({
+            title: sanitizeInput(p.title, 80),
+            city: sanitizeInput(p.city, 50),
+            propertyType: sanitizeInput(p.propertyType, 50)
+          }))
+        : [];
       const ai = getGenAI();
 
       const contextPrompt = `You are "THIKANA Northeast AI Mitra", an expert travel guide assistant specialized in Northeast India (Assam, Meghalaya, Sikkim, Nagaland, Arunachal Pradesh, Mizoram, Manipur & Tripura).
 The user asks: "${query}"
 
 Here are available authentic Northeast properties on THIKANA for context:
-${JSON.stringify(availableProperties || [])}
+${JSON.stringify(availableProperties)}
 
 Provide a helpful, polite, and personalized 2-3 paragraph answer recommending suitable places, homestays, or local travel tips (such as best seasons, local tribal thalis, permits for Tawang/Nathula, or safari tips). Mention that travelers can click "Chat on WhatsApp" to talk directly with local hosts with zero commission!`;
 
