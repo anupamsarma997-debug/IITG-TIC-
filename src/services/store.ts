@@ -179,15 +179,12 @@ class DataStore {
       const rawUsers: User[] = storedUsers ? JSON.parse(storedUsers) : INITIAL_USERS;
       this.users = rawUsers.map((u) => {
         const userObj = { ...u };
-        if (!userObj.passwordSalt) {
-          userObj.passwordSalt = generateSalt();
-          const fallbackPass = (userObj as any).password || (userObj.role === 'admin' ? 'admin123' : 'pass123');
-          userObj.passwordHash = hashPasswordWithSalt(fallbackPass, userObj.passwordSalt);
-        } else if (!userObj.passwordHash) {
-          const fallbackPass = (userObj as any).password || (userObj.role === 'admin' ? 'admin123' : 'pass123');
-          userObj.passwordHash = hashPasswordWithSalt(fallbackPass, userObj.passwordSalt);
+        if ((userObj as any).password) {
+          const salt = userObj.passwordSalt || generateSalt();
+          userObj.passwordSalt = salt;
+          userObj.passwordHash = hashPasswordWithSalt((userObj as any).password, salt);
+          delete (userObj as any).password;
         }
-        delete (userObj as any).password;
         return userObj;
       });
 
@@ -438,14 +435,14 @@ class DataStore {
       }
     }
 
-    const pwd = user.password || 'pass123';
+    const pwd = user.password || '';
     const salt = generateSalt();
     const newUser: User = {
       ...user,
       role: assignedRole,
       username: user.username || user.email.split('@')[0],
-      passwordSalt: salt,
-      passwordHash: hashPasswordWithSalt(pwd, salt),
+      passwordSalt: pwd ? salt : undefined,
+      passwordHash: pwd ? hashPasswordWithSalt(pwd, salt) : undefined,
       googleEmail: user.googleEmail || user.email,
       id: 'user_' + Date.now(),
       status: 'active',
@@ -485,17 +482,19 @@ class DataStore {
       return { success: false, message: 'No account found with this username, email, or mobile number.' };
     }
 
+    if (!passwordInput || !passwordInput.trim()) {
+      return { success: false, message: 'Please enter your password.' };
+    }
+
     // Verify password via user-specific salt hash or legacy hash fallback
     let isValidPassword = false;
     if (found.passwordSalt && found.passwordHash) {
       const computedHash = hashPasswordWithSalt(passwordInput, found.passwordSalt);
       isValidPassword = found.passwordHash === computedHash;
-    } else {
-      // Legacy single-round static salt hash or plaintext fallback
+    } else if (found.passwordHash) {
+      // Legacy single-round static salt hash fallback
       const legacyHash = hashPassword(passwordInput);
-      isValidPassword =
-        (found.passwordHash && found.passwordHash === legacyHash) ||
-        (found.password && found.password === passwordInput);
+      isValidPassword = found.passwordHash === legacyHash;
     }
 
     if (!isValidPassword) {
