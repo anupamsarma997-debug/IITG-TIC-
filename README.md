@@ -6,9 +6,8 @@
 
 ## 🔗 Live Links & Demo
 
-* 🌐 **Live Website:** [https://thikana.app](https://thikana.app)
+* 🌐 **Live Website:** [https://mythikana.vercel.app/](https://mythikana.vercel.app/)
 * 💻 **GitHub Repository:** [https://github.com/anupamsarma/thikana-marketplace](https://github.com/anupamsarma/thikana-marketplace)
-* 📹 **30-Second Demo Video:** [Watch Walkthrough](#) *(Available upon request)*
 
 ---
 

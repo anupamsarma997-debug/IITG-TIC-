@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://thikana.app/sitemap.xml
+Sitemap: https://mythikana.vercel.app/sitemap.xml
