@@ -58,10 +58,9 @@ service cloud.firestore {
       );
     }
 
-    // Users Collection: Users manage their own profiles
+    // Users Collection: Strict user profile privacy (users can only access their own user document)
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isUser(userId);
+      allow read, write: if isUser(userId);
     }
   }
 }
