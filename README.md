@@ -142,6 +142,20 @@ thikana-marketplace/
 
 * **Firestore Security Rules (`firestore.rules`):** All user document writes are constrained to authenticated users matching their respective `UID`. Property creation & modification require authenticated host role, preventing administrative privilege escalation.
 * **Server-Side API Key Concealment:** Gemini API keys (`GEMINI_API_KEY`) are kept exclusively inside server environment variables (`process.env.GEMINI_API_KEY`) and proxied through `/api/*` endpoints to prevent client-side credential exposure.
+* **Zero Default Passwords:** The system contains zero hardcoded default credentials or static passwords for elevated accounts.
+
+---
+
+## 🔑 Admin Access (First-Time Setup)
+
+The seeded admin account (`admin@gmail.com`) ships with no default password for security — there is no hardcoded admin password backdoor. To gain admin access for the first time:
+
+1. Open the app, open the **Account Login** modal, and click **"Forgot Password / Reset Pass"**.
+2. Enter the admin's registered Google email: `admin@gmail.com`
+3. Complete the Firebase-sent password reset verification step, then set your own secure password.
+4. Log in with username `admin` and your newly created password.
+
+Do this immediately after deploying to a new environment. Never hardcode or commit an admin password to source control.
 
 ---
 

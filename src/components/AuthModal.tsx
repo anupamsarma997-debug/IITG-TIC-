@@ -156,7 +156,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setOtpExpiry(Date.now() + 5 * 60 * 1000);
         setOtpAttempts(0);
         setStep('otp');
-        setSuccessMessage(`Verification code sent to phone number ${formattedPhone}`);
+        console.info('[THIKANA Security] Demo Mode Verification Code:', generated);
+        setSuccessMessage(`Demo Verification Mode active (SMS Gateway Not Configured). Verification code dispatched to ${email || googleEmail || formattedPhone}.`);
       } finally {
         setIsLoading(false);
       }
@@ -168,6 +169,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setOtpExpiry(Date.now() + 5 * 60 * 1000);
       setOtpAttempts(0);
       setStep('otp');
+      console.info('[THIKANA Security] Demo Mode Verification Code:', generated);
+      setSuccessMessage(`Demo Verification Mode active. Verification code dispatched to ${email || googleEmail || phone}.`);
     }
   };
 
@@ -609,15 +612,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               ) : (
                 <div className="bg-amber-50 dark:bg-amber-950/50 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800 text-center space-y-1">
                   <p className="text-xs text-amber-900 dark:text-amber-200 font-bold">
-                    ⚡ Verification Code
+                    ⚡ Demo Mode — SMS Gateway Not Configured
                   </p>
-                  {sentOtpCode && (
-                    <div className="text-sm font-mono font-black text-amber-900 dark:text-amber-200 tracking-widest bg-amber-200/80 dark:bg-amber-900/80 py-1.5 px-4 rounded-xl inline-block my-1 border border-amber-300 dark:border-amber-700">
-                      {sentOtpCode}
-                    </div>
-                  )}
                   <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
-                    Enter the code above to complete session verification. (In live production domain, SMS is delivered directly via Firebase Phone Auth).
+                    Firebase Phone Auth is active in production domains. In this preview environment, check your developer console or registered email (<span className="font-semibold">{googleEmail || email || 'your email'}</span>) for the 6-digit verification code.
                   </p>
                 </div>
               )}
