@@ -83,7 +83,11 @@ class DataStore {
             remoteProps.push({ id: docSnap.id, ...docSnap.data() } as Property);
           });
           if (remoteProps.length > 0) {
-            this.properties = remoteProps;
+            const propMap = new Map<string, Property>();
+            this.properties.forEach((p) => propMap.set(p.id, p));
+            remoteProps.forEach((rp) => propMap.set(rp.id, rp));
+            this.properties = Array.from(propMap.values());
+            this.persist();
             this.notify(false);
           }
         } else if (!this.isFirebaseSynced) {
@@ -105,7 +109,11 @@ class DataStore {
             remoteRooms.push({ id: docSnap.id, ...docSnap.data() } as RoomType);
           });
           if (remoteRooms.length > 0) {
-            this.rooms = remoteRooms;
+            const roomMap = new Map<string, RoomType>();
+            this.rooms.forEach((r) => roomMap.set(r.id, r));
+            remoteRooms.forEach((rr) => roomMap.set(rr.id, rr));
+            this.rooms = Array.from(roomMap.values());
+            this.persist();
             this.notify(false);
           }
         } else if (!this.isFirebaseSynced) {
@@ -117,6 +125,26 @@ class DataStore {
         console.warn('Firestore rooms sync warning:', err);
       });
 
+      // Sync users collection from Firestore
+      onSnapshot(collection(db, 'users'), (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteUsers: User[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteUsers.push({ id: docSnap.id, ...docSnap.data() } as User);
+          });
+          if (remoteUsers.length > 0) {
+            const userMap = new Map<string, User>();
+            this.users.forEach((u) => userMap.set(u.id, u));
+            remoteUsers.forEach((ru) => userMap.set(ru.id, ru));
+            this.users = Array.from(userMap.values());
+            this.persist();
+            this.notify(false);
+          }
+        }
+      }, (err) => {
+        console.warn('Firestore users sync warning:', err);
+      });
+
       // Sync enquiries collection from Firestore
       onSnapshot(collection(db, 'enquiries'), (snapshot) => {
         if (!snapshot.empty) {
@@ -125,7 +153,11 @@ class DataStore {
             remoteEnquiries.push({ id: docSnap.id, ...docSnap.data() } as BookingEnquiry);
           });
           if (remoteEnquiries.length > 0) {
-            this.enquiries = remoteEnquiries;
+            const enqMap = new Map<string, BookingEnquiry>();
+            this.enquiries.forEach((e) => enqMap.set(e.id, e));
+            remoteEnquiries.forEach((re) => enqMap.set(re.id, re));
+            this.enquiries = Array.from(enqMap.values());
+            this.persist();
             this.notify(false);
           }
         }
@@ -192,6 +224,7 @@ class DataStore {
     };
     this.users.push(newUser);
     this.currentUserId = newUser.id;
+    setDoc(doc(db, 'users', newUser.id), newUser).catch((err) => console.warn('Firestore registerUser error:', err));
     this.notify();
     return newUser;
   }
@@ -241,6 +274,7 @@ class DataStore {
     }
 
     this.currentUserId = found.id;
+    setDoc(doc(db, 'users', found.id), found, { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
     this.notify();
     return { success: true, user: found, message: `Password reset successfully for @${found.username || found.name}! You are now logged in.` };
   }
