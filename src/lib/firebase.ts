@@ -1,24 +1,36 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import config from '../../firebase-applet-config.json';
 
-// Initialize Firebase
+// Safely attempt to load firebase-applet-config.json if present
+let config: Record<string, any> = {};
+try {
+  const configs = import.meta.glob('../../firebase-applet-config.json', { eager: true });
+  const keys = Object.keys(configs);
+  if (keys.length > 0) {
+    config = ((configs[keys[0]] as any).default || configs[keys[0]]) as Record<string, any>;
+  }
+} catch {
+  // Config file omitted or ignored in Git
+}
+
 const firebaseConfig = {
-  apiKey: config.apiKey,
-  authDomain: config.authDomain,
-  projectId: config.projectId,
-  storageBucket: config.storageBucket,
-  messagingSenderId: config.messagingSenderId,
-  appId: config.appId,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey || 'AIzaSyC4NBXm7XoJKGvh5JY4OSHK7NYco2ntJsM',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain || 'peak-ego-v224x.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId || 'peak-ego-v224x',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket || 'peak-ego-v224x.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId || '514524067934',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId || '1:514524067934:web:82e09fc2948bd107d89ccf',
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Use named firestore database ID from firebase-applet-config.json if specified
-export const db = config.firestoreDatabaseId
-  ? initializeFirestore(app, {}, config.firestoreDatabaseId)
+const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId || 'ai-studio-thikana-9c4578c1-2846-48dc-b655-1dd95d3749bb';
+
+export const db = databaseId
+  ? initializeFirestore(app, {}, databaseId)
   : getFirestore(app);
 
 export const auth = getAuth(app);
 export default app;
+
