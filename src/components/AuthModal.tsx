@@ -133,6 +133,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    const target = phone.trim() ? (phone.trim().startsWith('+') ? phone.trim() : `+91${phone.trim().replace(/[^0-9]/g, '')}`) : (email || googleEmail);
+
     const rawPhone = phone.trim();
     if (rawPhone) {
       const formattedPhone = rawPhone.startsWith('+') ? rawPhone : `+91${rawPhone.replace(/[^0-9]/g, '')}`;
@@ -145,32 +147,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setOtpExpiry(Date.now() + 5 * 60 * 1000); // 5 min expiry
         setOtpAttempts(0);
         setStep('otp');
-        setSuccessMessage(`Firebase Phone Verification code sent via SMS to ${formattedPhone}`);
+        setSuccessMessage(`Firebase Verification code sent via SMS to ${formattedPhone}`);
+        return;
       } catch (err: any) {
-        console.warn('Firebase Phone Auth notice:', err);
-        // Secure single-use fallback if domain/reCAPTCHA isn't allowed in current iframe domain
-        const generated = Math.floor(100000 + Math.random() * 900000).toString();
-        setSentOtpCode(generated);
-        setConfirmationResult(null);
-        setUseFirebasePhoneAuth(false);
-        setOtpExpiry(Date.now() + 5 * 60 * 1000);
-        setOtpAttempts(0);
-        setStep('otp');
-        console.info('[THIKANA Security] Demo Mode Verification Code:', generated);
-        setSuccessMessage(`Demo Verification Mode active (SMS Gateway Not Configured). Verification code dispatched to ${email || googleEmail || formattedPhone}.`);
+        console.warn('Firebase Phone Auth notice, switching to secure server verification route:', err);
       } finally {
         setIsLoading(false);
       }
-    } else {
-      const generated = Math.floor(100000 + Math.random() * 900000).toString();
-      setSentOtpCode(generated);
+    }
+
+    // Call server-side verification code endpoint
+    try {
+      setIsLoading(true);
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send verification code.');
+      }
       setConfirmationResult(null);
       setUseFirebasePhoneAuth(false);
       setOtpExpiry(Date.now() + 5 * 60 * 1000);
       setOtpAttempts(0);
       setStep('otp');
-      console.info('[THIKANA Security] Demo Mode Verification Code:', generated);
-      setSuccessMessage(`Demo Verification Mode active. Verification code dispatched to ${email || googleEmail || phone}.`);
+      setSuccessMessage(`Verification code sent to ${target}`);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error dispatching verification code. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -197,18 +204,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         console.warn('Firebase Phone verification error:', err);
         const remaining = 5 - (otpAttempts + 1);
         setOtpAttempts((prev) => prev + 1);
-        setErrorMessage(`Invalid SMS Verification Code! Please enter the 6-digit code sent to your phone (${remaining} attempt(s) remaining).`);
+        setErrorMessage(`Invalid Verification Code! Please enter the 6-digit code sent to your phone (${remaining} attempt(s) remaining).`);
         setIsLoading(false);
         return;
       } finally {
         setIsLoading(false);
       }
     } else {
-      if (otp.trim() !== sentOtpCode) {
-        const remaining = 5 - (otpAttempts + 1);
-        setOtpAttempts((prev) => prev + 1);
-        setErrorMessage(`Invalid Verification Code! Please enter the 6-digit code sent to your session (${remaining} attempt(s) remaining).`);
+      const target = phone.trim() ? (phone.trim().startsWith('+') ? phone.trim() : `+91${phone.trim().replace(/[^0-9]/g, '')}`) : (email || googleEmail);
+      try {
+        setIsLoading(true);
+        const res = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target, code: otp.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setOtpAttempts((prev) => prev + 1);
+          setErrorMessage(data.message || 'Invalid Verification Code!');
+          return;
+        }
+      } catch (err: any) {
+        setErrorMessage('Verification service unavailable. Please try again.');
         return;
+      } finally {
+        setIsLoading(false);
       }
     }
 
@@ -610,12 +631,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="bg-amber-50 dark:bg-amber-950/50 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800 text-center space-y-1">
-                  <p className="text-xs text-amber-900 dark:text-amber-200 font-bold">
-                    ⚡ Demo Mode — SMS Gateway Not Configured
+                <div className="bg-emerald-50 dark:bg-emerald-950/50 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-center space-y-1">
+                  <p className="text-xs text-emerald-900 dark:text-emerald-200 font-bold">
+                    🔐 Security Verification Code Sent
                   </p>
                   <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
-                    Firebase Phone Auth is active in production domains. In this preview environment, check your developer console or registered email (<span className="font-semibold">{googleEmail || email || 'your email'}</span>) for the 6-digit verification code.
+                    Enter the 6-digit verification code sent to <span className="font-semibold text-emerald-800 dark:text-emerald-300">{phone || email || googleEmail}</span> to complete registration. Code is valid for 5 minutes.
                   </p>
                 </div>
               )}
