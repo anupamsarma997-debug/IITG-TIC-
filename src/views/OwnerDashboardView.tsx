@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Property, RoomType, User } from '../types';
 import { store } from '../services/store';
+import { AuthModal } from '../components/AuthModal';
 import { 
   Building2, 
   PlusCircle, 
@@ -23,7 +24,8 @@ import {
   UserCheck,
   Zap,
   Loader2,
-  X
+  X,
+  Lock
 } from 'lucide-react';
 
 interface OwnerDashboardViewProps {
@@ -43,6 +45,24 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     currentUser ? store.getPropertiesByOwner(currentUser.id) : store.getProperties()
   );
   const [enquiries, setEnquiries] = useState(store.getEnquiries());
+
+  // Ownership Guard & Login Modal State
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authRequiredOwnerId, setAuthRequiredOwnerId] = useState<string | undefined>();
+  const [authTargetTitle, setAuthTargetTitle] = useState<string | undefined>();
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+
+  const verifyOwnerAndExecute = (prop: Property, action: () => void) => {
+    const user = store.getCurrentUser();
+    if (user && store.isOwnerOfProperty(user.id, prop.id)) {
+      action();
+    } else {
+      setAuthRequiredOwnerId(prop.ownerId);
+      setAuthTargetTitle(prop.title);
+      setPendingAction(() => action);
+      setAuthModalOpen(true);
+    }
+  };
 
   // Modal State for Add / Edit Property
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -499,17 +519,19 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => handleOpenEdit(property)}
+                            onClick={() => verifyOwnerAndExecute(property, () => handleOpenEdit(property))}
                             className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl"
-                            title="Edit Property"
+                            title="Edit Property (Requires Owner Login)"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm('Delete this property listing?')) {
-                                store.deleteProperty(property.id);
-                              }
+                              verifyOwnerAndExecute(property, () => {
+                                if (confirm('Delete this property listing?')) {
+                                  store.deleteProperty(property.id);
+                                }
+                              });
                             }}
                             className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl"
                             title="Delete Property"
@@ -535,8 +557,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                         </span>
 
                         <button
-                          onClick={() => handleBuyAddon(property.id, 'renew')}
-                          className="bg-slate-900 text-white text-[10px] px-2.5 py-1 rounded-lg hover:bg-slate-800"
+                          onClick={() => verifyOwnerAndExecute(property, () => handleBuyAddon(property.id, 'renew'))}
+                          className="bg-slate-900 text-white text-[10px] px-2.5 py-1 rounded-lg hover:bg-slate-800 cursor-pointer"
                         >
                           Renew ₹1000
                         </button>
@@ -549,7 +571,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                             Room Types & Pricing ({rooms.length})
                           </span>
                           <button
-                            onClick={() => handleOpenAddRoom(property.id)}
+                            onClick={() => verifyOwnerAndExecute(property, () => handleOpenAddRoom(property.id))}
                             className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-extrabold px-2.5 py-1 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1 text-[11px] cursor-pointer"
                           >
                             <PlusCircle className="w-3.5 h-3.5" />
@@ -581,19 +603,21 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
                               <div className="flex items-center gap-2 justify-end mt-1">
                                 <button
-                                  onClick={() => handleOpenEditRoom(property.id, r)}
-                                  className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-0.5"
+                                  onClick={() => verifyOwnerAndExecute(property, () => handleOpenEditRoom(property.id, r))}
+                                  className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
                                 >
                                   <Edit3 className="w-3 h-3" /> Edit Price
                                 </button>
                                 <span className="text-slate-300">•</span>
                                 <button
                                   onClick={() => {
-                                    if (confirm(`Delete room "${r.roomName}"?`)) {
-                                      store.deleteRoomType(r.id);
-                                    }
+                                    verifyOwnerAndExecute(property, () => {
+                                      if (confirm(`Delete room "${r.roomName}"?`)) {
+                                        store.deleteRoomType(r.id);
+                                      }
+                                    });
                                   }}
-                                  className="text-[10px] text-rose-500 hover:underline"
+                                  className="text-[10px] text-rose-500 hover:underline cursor-pointer"
                                 >
                                   Delete
                                 </button>
@@ -1374,6 +1398,28 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Property Owner Login & Verification Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => {
+          setAuthModalOpen(false);
+          setPendingAction(null);
+        }}
+        initialMode="login"
+        requiredOwnerId={authRequiredOwnerId}
+        targetPropertyTitle={authTargetTitle}
+        onSuccessRole={() => {
+          setAuthModalOpen(false);
+          if (pendingAction) {
+            const act = pendingAction;
+            setPendingAction(null);
+            setTimeout(() => {
+              act();
+            }, 100);
+          }
+        }}
+      />
 
     </div>
   );

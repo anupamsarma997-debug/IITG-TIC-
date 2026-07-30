@@ -180,9 +180,12 @@ class DataStore {
     this.notify();
   }
 
-  public registerUser(user: Omit<User, 'id' | 'createdAt' | 'status'>): User {
+  public registerUser(user: Omit<User, 'id' | 'createdAt' | 'status'> & { username?: string; password?: string; googleEmail?: string }): User {
     const newUser: User = {
       ...user,
+      username: user.username || user.email.split('@')[0],
+      password: user.password || 'pass123',
+      googleEmail: user.googleEmail || user.email,
       id: 'user_' + Date.now(),
       status: 'active',
       createdAt: new Date().toISOString(),
@@ -191,6 +194,63 @@ class DataStore {
     this.currentUserId = newUser.id;
     this.notify();
     return newUser;
+  }
+
+  public loginWithUsernamePassword(identifier: string, passwordInput: string): { success: boolean; user?: User; message?: string } {
+    const q = identifier.trim().toLowerCase();
+    const found = this.users.find((u) => 
+      (u.username && u.username.toLowerCase() === q) ||
+      (u.email && u.email.toLowerCase() === q) ||
+      (u.googleEmail && u.googleEmail.toLowerCase() === q) ||
+      u.phone === identifier.trim()
+    );
+
+    if (!found) {
+      return { success: false, message: 'No account found with this username, email, or mobile number.' };
+    }
+
+    if (found.password && found.password !== passwordInput) {
+      return { success: false, message: 'Incorrect password! Please check your credentials or use Google Email password reset.' };
+    }
+
+    this.currentUserId = found.id;
+    this.notify();
+    return { success: true, user: found };
+  }
+
+  public resetPasswordWithGoogleEmail(googleEmailInput: string, newPassword: string, newUsername?: string): { success: boolean; user?: User; message?: string } {
+    const q = googleEmailInput.trim().toLowerCase();
+    const found = this.users.find((u) => 
+      (u.googleEmail && u.googleEmail.toLowerCase() === q) ||
+      (u.email && u.email.toLowerCase() === q)
+    );
+
+    if (!found) {
+      return { 
+        success: false, 
+        message: 'No account found matching this Google Email address. Please make sure you enter the email address used during registration.' 
+      };
+    }
+
+    found.password = newPassword;
+    if (newUsername && newUsername.trim().length > 0) {
+      found.username = newUsername.trim();
+    }
+    if (!found.googleEmail) {
+      found.googleEmail = googleEmailInput.trim();
+    }
+
+    this.currentUserId = found.id;
+    this.notify();
+    return { success: true, user: found, message: `Password reset successfully for @${found.username || found.name}! You are now logged in.` };
+  }
+
+  public isOwnerOfProperty(userId: string | undefined, propertyId: string): boolean {
+    if (!userId) return false;
+    const user = this.users.find((u) => u.id === userId);
+    if (user && user.role === 'admin') return true;
+    const prop = this.properties.find((p) => p.id === propertyId);
+    return prop ? prop.ownerId === userId : false;
   }
 
   public updateUserStatus(userId: string, status: User['status']) {

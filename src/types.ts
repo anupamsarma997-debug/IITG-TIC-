@@ -3,6 +3,9 @@ export type UserRole = 'customer' | 'owner' | 'admin';
 export interface User {
   id: string;
   name: string;
+  username?: string;
+  password?: string;
+  googleEmail?: string;
   email: string;
   phone: string;
   whatsapp: string;

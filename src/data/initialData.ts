@@ -4,6 +4,9 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'user_admin',
     name: 'THIKANA Northeast Admin',
+    username: 'admin',
+    password: 'admin123',
+    googleEmail: 'admin@gmail.com',
     email: 'admin@thikana-ne.in',
     phone: '+919876543210',
     whatsapp: '919876543210',
@@ -14,6 +17,9 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'owner_1',
     name: 'Pranab Gogoi',
+    username: 'pranab123',
+    password: 'pass123',
+    googleEmail: 'pranab@gmail.com',
     email: 'pranab@kazirangaeco.in',
     phone: '+919435012345',
     whatsapp: '919435012345',
@@ -24,6 +30,9 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'owner_2',
     name: 'Bah Pyntheng Lyngdoh',
+    username: 'pyntheng123',
+    password: 'pass123',
+    googleEmail: 'pyntheng@gmail.com',
     email: 'pyntheng@sohraclouds.in',
     phone: '+919863098765',
     whatsapp: '919863098765',
@@ -34,6 +43,9 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'owner_3',
     name: 'Tashi Dorjee Monpa',
+    username: 'tashi123',
+    password: 'pass123',
+    googleEmail: 'tashi@gmail.com',
     email: 'tashi@tawanghaven.in',
     phone: '+919436054321',
     whatsapp: '919436054321',
@@ -44,6 +56,9 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'owner_4',
     name: 'Vizokho Angami',
+    username: 'vizokho123',
+    password: 'pass123',
+    googleEmail: 'vizokho@gmail.com',
     email: 'vizokho@dzukounaga.in',
     phone: '+919856033445',
     whatsapp: '919856033445',
@@ -54,6 +69,9 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'customer_1',
     name: 'Rupaam Sarma',
+    username: 'rupaam123',
+    password: 'pass123',
+    googleEmail: 'rupaam@gmail.com',
     email: 'rupaam@northeasttraveler.com',
     phone: '+919954112233',
     whatsapp: '919954112233',
