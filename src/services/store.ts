@@ -403,6 +403,7 @@ class DataStore {
 
     const newProp: Property = {
       ...prop,
+      ownerUid: prop.ownerUid || prop.ownerId,
       id: 'prop_' + Date.now(),
       rating: 5.0,
       reviewsCount: 1,
@@ -439,6 +440,11 @@ class DataStore {
   public updateProperty(id: string, updates: Partial<Property>) {
     const idx = this.properties.findIndex((p) => p.id === id);
     if (idx !== -1) {
+      const currentUser = this.getCurrentUser();
+      if (currentUser && !this.isOwnerOfProperty(currentUser.id, id)) {
+        console.warn('Unauthorized property update blocked:', id);
+        return;
+      }
       this.properties[idx] = { ...this.properties[idx], ...updates };
       setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
       this.notify();
@@ -497,6 +503,11 @@ class DataStore {
   }
 
   public deleteProperty(id: string) {
+    const currentUser = this.getCurrentUser();
+    if (currentUser && !this.isOwnerOfProperty(currentUser.id, id)) {
+      console.warn('Unauthorized property deletion blocked:', id);
+      return;
+    }
     this.properties = this.properties.filter((p) => p.id !== id);
     const deletedRooms = this.rooms.filter((r) => r.propertyId === id);
     this.rooms = this.rooms.filter((r) => r.propertyId !== id);

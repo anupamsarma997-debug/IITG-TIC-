@@ -16,25 +16,37 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Properties Collection: Publicly readable; authenticated hosts manage their own property listings
+    // Properties Collection: Publicly readable; strictly authenticated owners manage ONLY their own property listings
     match /properties/{propertyId} {
       allow read: if true;
       allow create: if isSignedIn() && (
-        !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid
+        request.resource.data.ownerUid == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        request.resource.data.ownerId == ('google_' + request.auth.uid) ||
+        request.resource.data.ownerId == ('user_' + request.auth.uid)
       );
       allow update, delete: if isSignedIn() && (
-        !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
+        resource.data.ownerUid == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.ownerId == ('google_' + request.auth.uid) ||
+        resource.data.ownerId == ('user_' + request.auth.uid)
       );
     }
 
-    // Rooms Collection: Publicly readable; authenticated hosts manage room inventory for their properties
+    // Rooms Collection: Publicly readable; strictly authenticated owners manage room inventory for THEIR properties
     match /rooms/{roomId} {
       allow read: if true;
       allow create: if isSignedIn() && (
-        !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid
+        request.resource.data.ownerUid == request.auth.uid ||
+        request.resource.data.ownerId == request.auth.uid ||
+        request.resource.data.ownerId == ('google_' + request.auth.uid) ||
+        request.resource.data.ownerId == ('user_' + request.auth.uid)
       );
       allow update, delete: if isSignedIn() && (
-        !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
+        resource.data.ownerUid == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.ownerId == ('google_' + request.auth.uid) ||
+        resource.data.ownerId == ('user_' + request.auth.uid)
       );
     }
 
@@ -43,7 +55,8 @@ service cloud.firestore {
       allow create: if true;
       allow read, update, delete: if isSignedIn() && (
         !('hostUid' in resource.data) || resource.data.hostUid == request.auth.uid ||
-        !('guestUid' in resource.data) || resource.data.guestUid == request.auth.uid
+        !('guestUid' in resource.data) || resource.data.guestUid == request.auth.uid ||
+        resource.data.hostId == request.auth.uid
       );
     }
 
@@ -51,10 +64,12 @@ service cloud.firestore {
     match /banners/{bannerId} {
       allow read: if true;
       allow create: if isSignedIn() && (
-        !('advertiserUid' in request.resource.data) || request.resource.data.advertiserUid == request.auth.uid
+        request.resource.data.advertiserUid == request.auth.uid ||
+        request.resource.data.advertiserId == request.auth.uid
       );
       allow update, delete: if isSignedIn() && (
-        !('advertiserUid' in resource.data) || resource.data.advertiserUid == request.auth.uid
+        resource.data.advertiserUid == request.auth.uid ||
+        resource.data.advertiserId == request.auth.uid
       );
     }
 
@@ -65,5 +80,6 @@ service cloud.firestore {
     }
   }
 }
+
 
 

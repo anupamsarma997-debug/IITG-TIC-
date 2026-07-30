@@ -159,7 +159,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'properties' | 'subscriptions' | 'leads'>('properties');
-  const [filterMode, setFilterMode] = useState<'all' | 'my'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'my'>('my');
 
   React.useEffect(() => {
     if (autoOpenAddProperty) {

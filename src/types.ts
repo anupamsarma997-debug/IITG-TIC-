@@ -34,6 +34,7 @@ export interface RoomType {
 export interface Property {
   id: string;
   ownerId: string;
+  ownerUid?: string;
   ownerName: string;
   ownerPhone: string;
   ownerWhatsApp: string;
