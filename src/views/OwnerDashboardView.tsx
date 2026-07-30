@@ -88,15 +88,32 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   const [ownerPhoneInput, setOwnerPhoneInput] = useState<string>('+91 9876543210');
   const [formError, setFormError] = useState<string>('');
 
+  // Helper to count words
+  const countWords = (text: string): number => {
+    return text.trim() ? text.trim().split(/\s+/).length : 0;
+  };
+
   // Handle local image file upload (converts images to Data URLs & appends to photoUrlsInput)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setFormError('');
 
+    const currentPhotos = photoUrlsInput.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (currentPhotos.length >= 20) {
+      setFormError('⚠️ Maximum limit reached! You can upload a maximum of 20 images per listing.');
+      return;
+    }
+
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
+    let addedCount = 0;
 
     for (let i = 0; i < files.length; i++) {
+      if (currentPhotos.length + addedCount >= 20) {
+        setFormError('⚠️ Maximum 20 photos limit reached. Only the first 20 images were added.');
+        break;
+      }
+
       const file = files[i];
 
       if (!allowedTypes.includes(file.type.toLowerCase()) && !file.type.startsWith('image/')) {
@@ -109,11 +126,16 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         return;
       }
 
+      addedCount++;
       const reader = new FileReader();
       reader.onload = (event) => {
         const result = event.target?.result as string;
         if (result) {
-          setPhotoUrlsInput((prev) => (prev ? `${prev}\n${result}` : result));
+          setPhotoUrlsInput((prev) => {
+            const list = prev.split('\n').map((s) => s.trim()).filter(Boolean);
+            if (list.length >= 20) return prev;
+            return prev ? `${prev}\n${result}` : result;
+          });
         }
       };
       reader.readAsDataURL(file);
@@ -244,7 +266,12 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
       const data = await res.json();
       if (data.description) {
-        setDescription(data.description);
+        const words = data.description.trim().split(/\s+/);
+        if (words.length > 150) {
+          setDescription(words.slice(0, 145).join(' ') + '...');
+        } else {
+          setDescription(data.description);
+        }
       }
     } catch (err) {
       console.error('AI error:', err);
@@ -270,6 +297,12 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       return;
     }
 
+    const descWords = countWords(description);
+    if (descWords > 150) {
+      setFormError(`⚠️ Description limit exceeded! Description must be under 150 words. Current count: ${descWords} words.`);
+      return;
+    }
+
     if (!city.trim()) {
       setFormError('⚠️ Please specify the City / Location.');
       return;
@@ -291,6 +324,11 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
       .slice(0, 20); // Up to 20 photos
+
+    if (photosList.length > 20) {
+      setFormError('⚠️ Maximum 20 photos allowed per listing.');
+      return;
+    }
 
     const attractionsList = nearbyAttractions
       .split(',')
@@ -1028,8 +1066,12 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
               {/* AI Generator Description Section */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Property Description (Unlimited text) <span className="text-rose-500">*</span>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <span>Property Description</span>
+                    <span className="text-rose-500">*</span>
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${countWords(description) > 150 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                      {countWords(description)} / 150 words max
+                    </span>
                   </label>
                   
                   <button
@@ -1046,7 +1088,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                 <textarea
                   rows={4}
                   required
-                  placeholder="Describe your homestay, local organic food, mountain views, peaceful atmosphere..."
+                  placeholder="Describe your homestay, local organic food, mountain views, peaceful atmosphere (Max 150 words)..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1167,8 +1209,11 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
               {/* Photo & Video Upload URLs with Real Image File Picker */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Hotel / Homestay Real Photos (Gallery)
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <span>Hotel / Homestay Gallery Photos</span>
+                    <span className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">
+                      {photoUrlsInput.split('\n').filter((s) => s.trim()).length} / 20 Max
+                    </span>
                   </label>
                   <div className="flex items-center gap-2">
                     {photoUrlsInput && (

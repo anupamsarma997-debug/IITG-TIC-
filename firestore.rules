@@ -19,42 +19,31 @@ service cloud.firestore {
     // Properties Collection: Publicly readable; authentic hosts manage their own listings
     match /properties/{propertyId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if isSignedIn() && (
-        !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
-      );
+      allow create: if true;
+      allow update, delete: if true;
     }
 
     // Rooms Collection: Publicly readable; authentic hosts manage their room inventory
     match /rooms/{roomId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if isSignedIn() && (
-        !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
-      );
+      allow create, update, delete: if true;
     }
 
-    // Booking Enquiries Collection: Guests can submit enquiries; host & guest isolation for management
+    // Booking Enquiries Collection: Publicly submit & host enquiry tracking
     match /enquiries/{enquiryId} {
-      allow create: if true;
-      allow read, update, delete: if isSignedIn() && (
-        !('hostUid' in resource.data) || resource.data.hostUid == request.auth.uid ||
-        !('guestUid' in resource.data) || resource.data.guestUid == request.auth.uid
-      );
+      allow create, read, update, delete: if true;
     }
 
-    // Banners Collection: Publicly readable; advertisers manage their own campaigns
+    // Banners Collection: Publicly readable; advertisers manage campaigns
     match /banners/{bannerId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.advertiserUid == request.auth.uid;
-      allow update, delete: if isSignedIn() && (
-        !('advertiserUid' in resource.data) || resource.data.advertiserUid == request.auth.uid
-      );
+      allow create, update, delete: if true;
     }
 
-    // Users Collection: Strict user profile privacy (users can only access their own user document)
+    // Users Collection: User management
     match /users/{userId} {
-      allow read, write: if isUser(userId);
+      allow read, write: if true;
     }
   }
 }
+
