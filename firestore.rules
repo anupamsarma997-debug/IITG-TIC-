@@ -11,39 +11,59 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Default safety net: Deny all by default
+    // Default safety net: Deny all unhandled operations
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Properties Collection: Publicly readable; authentic hosts manage their own listings
+    // Properties Collection: Publicly readable; authenticated hosts manage their own property listings
     match /properties/{propertyId} {
       allow read: if true;
-      allow create: if true;
-      allow update, delete: if true;
+      allow create: if isSignedIn() && (
+        !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid
+      );
+      allow update, delete: if isSignedIn() && (
+        !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
+      );
     }
 
-    // Rooms Collection: Publicly readable; authentic hosts manage their room inventory
+    // Rooms Collection: Publicly readable; authenticated hosts manage room inventory for their properties
     match /rooms/{roomId} {
       allow read: if true;
-      allow create, update, delete: if true;
+      allow create: if isSignedIn() && (
+        !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid
+      );
+      allow update, delete: if isSignedIn() && (
+        !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid
+      );
     }
 
-    // Booking Enquiries Collection: Publicly submit & host enquiry tracking
+    // Booking Enquiries Collection: Anyone can submit an enquiry; access restricted to involved host/guest
     match /enquiries/{enquiryId} {
-      allow create, read, update, delete: if true;
+      allow create: if true;
+      allow read, update, delete: if isSignedIn() && (
+        !('hostUid' in resource.data) || resource.data.hostUid == request.auth.uid ||
+        !('guestUid' in resource.data) || resource.data.guestUid == request.auth.uid
+      );
     }
 
-    // Banners Collection: Publicly readable; advertisers manage campaigns
+    // Banners Collection: Publicly readable; advertisers manage their own promotional campaigns
     match /banners/{bannerId} {
       allow read: if true;
-      allow create, update, delete: if true;
+      allow create: if isSignedIn() && (
+        !('advertiserUid' in request.resource.data) || request.resource.data.advertiserUid == request.auth.uid
+      );
+      allow update, delete: if isSignedIn() && (
+        !('advertiserUid' in resource.data) || resource.data.advertiserUid == request.auth.uid
+      );
     }
 
-    // Users Collection: User management
+    // Users Collection: Users manage their own profile documents
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isUser(userId);
     }
   }
 }
+
 
