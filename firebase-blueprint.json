@@ -1,0 +1,49 @@
+{
+  "collections": {
+    "properties": {
+      "title": "Properties",
+      "description": "Homestay and hotel listings with real photos and WhatsApp numbers",
+      "documents": {
+        "prop_1": {
+          "title": "Kaziranga Eco-Bamboo Homestay",
+          "description": "Authentic bamboo stilt cottage near Kaziranga National Park",
+          "propertyType": "Homestay",
+          "address": "Near Kohora Safari Range, Kaziranga",
+          "city": "Kaziranga",
+          "stateName": "Assam",
+          "photos": [
+            "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80",
+            "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80"
+          ],
+          "ownerName": "Bishnu Gogoi",
+          "ownerPhone": "+91 9876543210",
+          "ownerWhatsApp": "+919876543210",
+          "rating": 4.9,
+          "reviewsCount": 18,
+          "isVerified": true,
+          "isFeatured": true,
+          "status": "active"
+        }
+      }
+    },
+    "rooms": {
+      "title": "Rooms",
+      "description": "Room types and pricing per property",
+      "documents": {
+        "room_1": {
+          "propertyId": "prop_1",
+          "roomName": "Bamboo Cottage Suite",
+          "pricePerNight": 2200,
+          "discountPrice": 1800,
+          "maxGuests": 3,
+          "bedType": "King Size Bed"
+        }
+      }
+    },
+    "enquiries": {
+      "title": "Booking Enquiries",
+      "description": "Guest booking enquiries routed to owners via WhatsApp and stored in database",
+      "documents": {}
+    }
+  }
+}

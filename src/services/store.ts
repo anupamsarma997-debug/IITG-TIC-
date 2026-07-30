@@ -1,5 +1,7 @@
 import { Property, RoomType, BannerAd, User, BookingEnquiry, SubscriptionTransaction, PropertyType } from '../types';
 import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INITIAL_TRANSACTIONS } from '../data/initialData';
+import { db } from '../lib/firebase';
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
   USERS: 'thikana_users_v1',
@@ -24,9 +26,11 @@ class DataStore {
   private listeners: Set<() => void> = new Set();
   private isDarkMode: boolean = false;
   private isMobileFrame: boolean = false;
+  private isFirebaseSynced: boolean = false;
 
   constructor() {
     this.initData();
+    this.initFirebaseListeners();
   }
 
   private initData() {
@@ -69,6 +73,71 @@ class DataStore {
     }
   }
 
+  private initFirebaseListeners() {
+    try {
+      // Sync properties collection from Firestore
+      onSnapshot(collection(db, 'properties'), (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteProps: Property[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteProps.push({ id: docSnap.id, ...docSnap.data() } as Property);
+          });
+          if (remoteProps.length > 0) {
+            this.properties = remoteProps;
+            this.notify(false);
+          }
+        } else if (!this.isFirebaseSynced) {
+          // Seed Firestore with initial properties if empty
+          INITIAL_PROPERTIES.forEach((p) => {
+            setDoc(doc(db, 'properties', p.id), p).catch((err) => console.warn('Firestore seed prop error:', err));
+          });
+        }
+        this.isFirebaseSynced = true;
+      }, (err) => {
+        console.warn('Firestore properties sync warning:', err);
+      });
+
+      // Sync rooms collection from Firestore
+      onSnapshot(collection(db, 'rooms'), (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteRooms: RoomType[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteRooms.push({ id: docSnap.id, ...docSnap.data() } as RoomType);
+          });
+          if (remoteRooms.length > 0) {
+            this.rooms = remoteRooms;
+            this.notify(false);
+          }
+        } else if (!this.isFirebaseSynced) {
+          INITIAL_ROOMS.forEach((r) => {
+            setDoc(doc(db, 'rooms', r.id), r).catch((err) => console.warn('Firestore seed room error:', err));
+          });
+        }
+      }, (err) => {
+        console.warn('Firestore rooms sync warning:', err);
+      });
+
+      // Sync enquiries collection from Firestore
+      onSnapshot(collection(db, 'enquiries'), (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteEnquiries: BookingEnquiry[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteEnquiries.push({ id: docSnap.id, ...docSnap.data() } as BookingEnquiry);
+          });
+          if (remoteEnquiries.length > 0) {
+            this.enquiries = remoteEnquiries;
+            this.notify(false);
+          }
+        }
+      }, (err) => {
+        console.warn('Firestore enquiries sync warning:', err);
+      });
+
+    } catch (err) {
+      console.error('Firebase initialization warning:', err);
+    }
+  }
+
   private persist() {
     try {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(this.users));
@@ -90,8 +159,10 @@ class DataStore {
     return () => this.listeners.delete(listener);
   }
 
-  private notify() {
-    this.persist();
+  private notify(syncLocal = true) {
+    if (syncLocal) {
+      this.persist();
+    }
     this.listeners.forEach((fn) => fn());
   }
 
@@ -202,6 +273,9 @@ class DataStore {
 
     this.properties.push(newProp);
 
+    // Write to Firestore
+    setDoc(doc(db, 'properties', newProp.id), newProp).catch((err) => console.warn('Firestore addProperty error:', err));
+
     this.addTransaction({
       ownerId: prop.ownerId,
       ownerName: prop.ownerName,
@@ -221,6 +295,7 @@ class DataStore {
     const idx = this.properties.findIndex((p) => p.id === id);
     if (idx !== -1) {
       this.properties[idx] = { ...this.properties[idx], ...updates };
+      setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
       this.notify();
     }
   }
@@ -229,6 +304,7 @@ class DataStore {
     const prop = this.getPropertyById(id);
     if (prop) {
       prop.status = prop.status === 'active' ? 'blocked' : 'active';
+      setDoc(doc(db, 'properties', id), { status: prop.status }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyStatus error:', err));
       this.notify();
     }
   }
@@ -237,6 +313,7 @@ class DataStore {
     const prop = this.getPropertyById(id);
     if (prop) {
       prop.isVerified = verified !== undefined ? verified : !prop.isVerified;
+      setDoc(doc(db, 'properties', id), { isVerified: prop.isVerified }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyVerified error:', err));
       if (prop.isVerified) {
         this.addTransaction({
           ownerId: prop.ownerId,
@@ -257,6 +334,7 @@ class DataStore {
     const prop = this.getPropertyById(id);
     if (prop) {
       prop.isFeatured = featured !== undefined ? featured : !prop.isFeatured;
+      setDoc(doc(db, 'properties', id), { isFeatured: prop.isFeatured }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyFeatured error:', err));
       if (prop.isFeatured) {
         this.addTransaction({
           ownerId: prop.ownerId,
@@ -275,7 +353,12 @@ class DataStore {
 
   public deleteProperty(id: string) {
     this.properties = this.properties.filter((p) => p.id !== id);
+    const deletedRooms = this.rooms.filter((r) => r.propertyId === id);
     this.rooms = this.rooms.filter((r) => r.propertyId !== id);
+    
+    deleteDoc(doc(db, 'properties', id)).catch((err) => console.warn('Firestore deleteProperty error:', err));
+    deletedRooms.forEach((r) => deleteDoc(doc(db, 'rooms', r.id)).catch(() => {}));
+    
     this.notify();
   }
 
@@ -293,6 +376,12 @@ class DataStore {
     prop.subscriptionExpiresAt = newExpiry.toISOString();
     prop.subscriptionExpiryDate = newExpiry.toISOString();
     prop.status = 'active';
+
+    setDoc(doc(db, 'properties', propertyId), {
+      subscriptionExpiresAt: prop.subscriptionExpiresAt,
+      subscriptionExpiryDate: prop.subscriptionExpiryDate,
+      status: prop.status
+    }, { merge: true }).catch((err) => console.warn('Firestore renew error:', err));
 
     this.addTransaction({
       ownerId: prop.ownerId,
@@ -319,6 +408,7 @@ class DataStore {
       id: 'room_' + Date.now(),
     };
     this.rooms.push(newRoom);
+    setDoc(doc(db, 'rooms', newRoom.id), newRoom).catch((err) => console.warn('Firestore addRoom error:', err));
     this.notify();
     return newRoom;
   }
@@ -331,12 +421,14 @@ class DataStore {
     const idx = this.rooms.findIndex((r) => r.id === id);
     if (idx !== -1) {
       this.rooms[idx] = { ...this.rooms[idx], ...updates };
+      setDoc(doc(db, 'rooms', id), this.rooms[idx], { merge: true }).catch((err) => console.warn('Firestore updateRoom error:', err));
       this.notify();
     }
   }
 
   public deleteRoom(id: string) {
     this.rooms = this.rooms.filter((r) => r.id !== id);
+    deleteDoc(doc(db, 'rooms', id)).catch((err) => console.warn('Firestore deleteRoom error:', err));
     this.notify();
   }
 
@@ -354,6 +446,7 @@ class DataStore {
       createdAt: nowIso,
     };
     this.enquiries.unshift(newEnquiry);
+    setDoc(doc(db, 'enquiries', newEnquiry.id), newEnquiry).catch((err) => console.warn('Firestore addEnquiry error:', err));
     this.notify();
     return newEnquiry;
   }

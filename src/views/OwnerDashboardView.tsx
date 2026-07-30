@@ -63,6 +63,26 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   const [checkOutTime, setCheckOutTime] = useState('11:00 AM');
   const [photoUrlsInput, setPhotoUrlsInput] = useState<string>('');
   const [videoUrl, setVideoUrl] = useState<string>('');
+  const [ownerWhatsAppInput, setOwnerWhatsAppInput] = useState<string>('919876543210');
+  const [ownerPhoneInput, setOwnerPhoneInput] = useState<string>('+91 9876543210');
+
+  // Handle local image file upload (converts images to Data URLs & appends to photoUrlsInput)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          setPhotoUrlsInput((prev) => (prev ? `${prev}\n${result}` : result));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // AI Description Generator State
   const [generatingAI, setGeneratingAI] = useState(false);
@@ -119,6 +139,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     setCheckOutTime('11:00 AM');
     setPhotoUrlsInput('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80\nhttps://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80');
     setVideoUrl('');
+    setOwnerPhoneInput(currentUser?.phone || '+91 9876543210');
+    setOwnerWhatsAppInput(currentUser?.whatsapp || '919876543210');
 
     // Pre-fill initial room setup
     setRoomName('Traditional Bamboo Stilt (Chang Ghar) Suite');
@@ -150,6 +172,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     setCheckOutTime(prop.checkOutTime);
     setPhotoUrlsInput((prop.photos || []).join('\n'));
     setVideoUrl(prop.videoUrl || '');
+    setOwnerPhoneInput(prop.ownerPhone || currentUser?.phone || '+91 9876543210');
+    setOwnerWhatsAppInput(prop.ownerWhatsApp || currentUser?.whatsapp || '919876543210');
     setIsFormOpen(true);
   };
 
@@ -203,8 +227,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
     const ownerId = currentUser ? currentUser.id : 'owner-demo';
     const ownerName = currentUser ? currentUser.name : 'Homestay Host';
-    const ownerPhone = currentUser ? currentUser.phone : '+91 9816012345';
-    const ownerWhatsApp = currentUser ? currentUser.whatsapp : '919816012345';
+    const finalPhone = ownerPhoneInput.trim() || '+91 9876543210';
+    const finalWhatsApp = ownerWhatsAppInput.trim() || '919876543210';
 
     if (editingPropertyId) {
       // Update
@@ -223,8 +247,10 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         nearbyAttractions: attractionsList,
         checkInTime,
         checkOutTime,
+        ownerPhone: finalPhone,
+        ownerWhatsApp: finalWhatsApp,
       });
-      alert('Property updated successfully!');
+      alert('Property updated successfully with Firebase sync!');
     } else {
       // Create New
       const newProp = store.addProperty({
@@ -244,8 +270,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         checkOutTime,
         ownerId,
         ownerName,
-        ownerPhone,
-        ownerWhatsApp,
+        ownerPhone: finalPhone,
+        ownerWhatsApp: finalWhatsApp,
       });
 
       // Automatically add default room type with host's specified room name & pricing
@@ -1008,18 +1034,103 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                 </div>
               </div>
 
-              {/* Photo & Video Upload URLs */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Photo URLs (Up to 20 Photos, one URL per line)
-                </label>
+              {/* Photo & Video Upload URLs with Real Image File Picker */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Hotel / Homestay Real Photos (Gallery)
+                  </label>
+                  <label className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer shadow-md flex items-center gap-1.5 transition-transform active:scale-95">
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>+ Upload Real Photos</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                  </label>
+                </div>
+
                 <textarea
                   rows={3}
                   value={photoUrlsInput}
                   onChange={(e) => setPhotoUrlsInput(e.target.value)}
-                  placeholder="https://images.unsplash.com/photo-..."
+                  placeholder="Paste photo URLs (one per line) or use '+ Upload Real Photos' button above..."
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-mono outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+
+                {/* Live Photo Preview Grid */}
+                {photoUrlsInput.split('\n').filter((s) => s.trim().length > 0).length > 0 && (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80">
+                    <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-2">
+                      Selected Real Property Photos ({photoUrlsInput.split('\n').filter((s) => s.trim().length > 0).length})
+                    </p>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                      {photoUrlsInput
+                        .split('\n')
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 0)
+                        .map((url, idx) => (
+                          <div key={idx} className="relative group aspect-video rounded-xl overflow-hidden bg-slate-900 border border-slate-300 dark:border-slate-700">
+                            <img src={url} alt={`Property Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const lines = photoUrlsInput.split('\n').map((s) => s.trim()).filter(Boolean);
+                                lines.splice(idx, 1);
+                                setPhotoUrlsInput(lines.join('\n'));
+                              }}
+                              className="absolute top-1 right-1 bg-rose-600/90 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Direct WhatsApp Contact Setup Section */}
+              <div className="bg-emerald-50/70 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-300 dark:border-emerald-700/80 space-y-3">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    WhatsApp Direct Booking Receiver Settings
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      WhatsApp Number (with country code e.g. 919876543210) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ownerWhatsAppInput}
+                      onChange={(e) => setOwnerWhatsAppInput(e.target.value)}
+                      placeholder="e.g. 919876543210"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                      Guest booking enquiries will be sent directly to this WhatsApp number.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Host Calling Mobile Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={ownerPhoneInput}
+                      onChange={(e) => setOwnerPhoneInput(e.target.value)}
+                      placeholder="e.g. +91 9876543210"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
