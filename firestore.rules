@@ -11,6 +11,23 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isOwner(ownerId, ownerUid) {
+      return isSignedIn() && (
+        ownerUid == request.auth.uid ||
+        ownerId == request.auth.uid ||
+        ownerId == ('google_' + request.auth.uid) ||
+        ownerId == ('user_' + request.auth.uid)
+      );
+    }
+
+    function isValidEnquiry() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['propertyId', 'guestName', 'guestPhone']) &&
+        data.guestName is string && data.guestName.size() <= 100 &&
+        data.guestPhone is string && data.guestPhone.size() <= 30 &&
+        (!('message' in data) || (data.message is string && data.message.size() <= 2000));
+    }
+
     // Default safety net: Deny all unhandled operations
     match /{document=**} {
       allow read, write: if false;
@@ -20,16 +37,10 @@ service cloud.firestore {
     match /properties/{propertyId} {
       allow read: if true;
       allow create: if isSignedIn() && (
-        request.resource.data.ownerUid == request.auth.uid ||
-        request.resource.data.ownerId == request.auth.uid ||
-        request.resource.data.ownerId == ('google_' + request.auth.uid) ||
-        request.resource.data.ownerId == ('user_' + request.auth.uid)
+        isOwner(request.resource.data.get('ownerId', ''), request.resource.data.get('ownerUid', ''))
       );
       allow update, delete: if isSignedIn() && (
-        resource.data.ownerUid == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        resource.data.ownerId == ('google_' + request.auth.uid) ||
-        resource.data.ownerId == ('user_' + request.auth.uid)
+        isOwner(resource.data.get('ownerId', ''), resource.data.get('ownerUid', ''))
       );
     }
 
@@ -37,26 +48,20 @@ service cloud.firestore {
     match /rooms/{roomId} {
       allow read: if true;
       allow create: if isSignedIn() && (
-        request.resource.data.ownerUid == request.auth.uid ||
-        request.resource.data.ownerId == request.auth.uid ||
-        request.resource.data.ownerId == ('google_' + request.auth.uid) ||
-        request.resource.data.ownerId == ('user_' + request.auth.uid)
+        isOwner(request.resource.data.get('ownerId', ''), request.resource.data.get('ownerUid', ''))
       );
       allow update, delete: if isSignedIn() && (
-        resource.data.ownerUid == request.auth.uid ||
-        resource.data.ownerId == request.auth.uid ||
-        resource.data.ownerId == ('google_' + request.auth.uid) ||
-        resource.data.ownerId == ('user_' + request.auth.uid)
+        isOwner(resource.data.get('ownerId', ''), resource.data.get('ownerUid', ''))
       );
     }
 
-    // Booking Enquiries Collection: Anyone can submit an enquiry; access restricted to involved host/guest
+    // Booking Enquiries Collection: Validated submission; access restricted to involved host/guest
     match /enquiries/{enquiryId} {
-      allow create: if true;
+      allow create: if isValidEnquiry();
       allow read, update, delete: if isSignedIn() && (
         !('hostUid' in resource.data) || resource.data.hostUid == request.auth.uid ||
         !('guestUid' in resource.data) || resource.data.guestUid == request.auth.uid ||
-        resource.data.hostId == request.auth.uid
+        resource.data.get('hostId', '') == request.auth.uid
       );
     }
 
@@ -64,12 +69,12 @@ service cloud.firestore {
     match /banners/{bannerId} {
       allow read: if true;
       allow create: if isSignedIn() && (
-        request.resource.data.advertiserUid == request.auth.uid ||
-        request.resource.data.advertiserId == request.auth.uid
+        request.resource.data.get('advertiserUid', '') == request.auth.uid ||
+        request.resource.data.get('advertiserId', '') == request.auth.uid
       );
       allow update, delete: if isSignedIn() && (
-        resource.data.advertiserUid == request.auth.uid ||
-        resource.data.advertiserId == request.auth.uid
+        resource.data.get('advertiserUid', '') == request.auth.uid ||
+        resource.data.get('advertiserId', '') == request.auth.uid
       );
     }
 
@@ -80,6 +85,3 @@ service cloud.firestore {
     }
   }
 }
-
-
-

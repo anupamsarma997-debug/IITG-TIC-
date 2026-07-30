@@ -1,6 +1,6 @@
 import { Property, RoomType, BannerAd, User, UserRole, BookingEnquiry, SubscriptionTransaction, PropertyType } from '../types';
 import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INITIAL_TRANSACTIONS } from '../data/initialData';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
@@ -335,7 +335,13 @@ class DataStore {
     const user = this.users.find((u) => u.id === userId);
     if (user && user.role === 'admin') return true;
     const prop = this.properties.find((p) => p.id === propertyId);
-    return prop ? prop.ownerId === userId : false;
+    if (!prop) return false;
+    const firebaseUid = auth.currentUser?.uid;
+    return (
+      prop.ownerId === userId ||
+      prop.ownerUid === userId ||
+      (!!firebaseUid && (prop.ownerUid === firebaseUid || prop.ownerId === firebaseUid || prop.ownerId === `google_${firebaseUid}`))
+    );
   }
 
   public updateUserStatus(userId: string, status: User['status']) {
@@ -401,9 +407,14 @@ class DataStore {
 
     const price = planType === 'standard_1500' ? 1500 : 1000;
 
+    const firebaseUid = auth.currentUser?.uid;
+    const ownerUid = prop.ownerUid || firebaseUid || (prop.ownerId.startsWith('google_') ? prop.ownerId.replace('google_', '') : prop.ownerId);
+    const ownerId = prop.ownerId || (firebaseUid ? `google_${firebaseUid}` : 'owner-demo');
+
     const newProp: Property = {
       ...prop,
-      ownerUid: prop.ownerUid || prop.ownerId,
+      ownerId,
+      ownerUid,
       id: 'prop_' + Date.now(),
       rating: 5.0,
       reviewsCount: 1,
@@ -559,8 +570,15 @@ class DataStore {
   }
 
   public addRoom(room: Omit<RoomType, 'id'>): RoomType {
+    const prop = this.getPropertyById(room.propertyId);
+    const firebaseUid = auth.currentUser?.uid;
+    const ownerId = room.ownerId || prop?.ownerId || (firebaseUid ? `google_${firebaseUid}` : 'owner-demo');
+    const ownerUid = room.ownerUid || prop?.ownerUid || firebaseUid || undefined;
+
     const newRoom: RoomType = {
       ...room,
+      ownerId,
+      ownerUid,
       id: 'room_' + Date.now(),
     };
     this.rooms.push(newRoom);
@@ -576,6 +594,12 @@ class DataStore {
   public updateRoom(id: string, updates: Partial<RoomType>) {
     const idx = this.rooms.findIndex((r) => r.id === id);
     if (idx !== -1) {
+      const room = this.rooms[idx];
+      const currentUser = this.getCurrentUser();
+      if (currentUser && !this.isOwnerOfProperty(currentUser.id, room.propertyId)) {
+        console.warn('Unauthorized room update blocked:', id);
+        return;
+      }
       this.rooms[idx] = { ...this.rooms[idx], ...updates };
       setDoc(doc(db, 'rooms', id), this.rooms[idx], { merge: true }).catch((err) => console.warn('Firestore updateRoom error:', err));
       this.notify();
@@ -583,9 +607,17 @@ class DataStore {
   }
 
   public deleteRoom(id: string) {
-    this.rooms = this.rooms.filter((r) => r.id !== id);
-    deleteDoc(doc(db, 'rooms', id)).catch((err) => console.warn('Firestore deleteRoom error:', err));
-    this.notify();
+    const room = this.rooms.find((r) => r.id === id);
+    if (room) {
+      const currentUser = this.getCurrentUser();
+      if (currentUser && !this.isOwnerOfProperty(currentUser.id, room.propertyId)) {
+        console.warn('Unauthorized room deletion blocked:', id);
+        return;
+      }
+      this.rooms = this.rooms.filter((r) => r.id !== id);
+      deleteDoc(doc(db, 'rooms', id)).catch((err) => console.warn('Firestore deleteRoom error:', err));
+      this.notify();
+    }
   }
 
   public deleteRoomType(id: string) {

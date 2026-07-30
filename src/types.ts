@@ -20,6 +20,8 @@ export type PropertyType = 'Homestay' | 'Hotel' | 'Resort' | 'Villa' | 'Cottage'
 export interface RoomType {
   id: string;
   propertyId: string;
+  ownerId?: string;
+  ownerUid?: string;
   roomName: string;
   pricePerNight: number;
   discountPrice?: number;
