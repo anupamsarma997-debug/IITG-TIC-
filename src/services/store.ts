@@ -1,4 +1,4 @@
-import { Property, RoomType, BannerAd, User, BookingEnquiry, SubscriptionTransaction, PropertyType } from '../types';
+import { Property, RoomType, BannerAd, User, UserRole, BookingEnquiry, SubscriptionTransaction, PropertyType } from '../types';
 import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INITIAL_TRANSACTIONS } from '../data/initialData';
 import { db } from '../lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -199,6 +199,57 @@ class DataStore {
   }
 
   // Auth & User Management
+  public loginOrRegisterWithGoogle(googleData: {
+    email: string;
+    displayName?: string | null;
+    photoURL?: string | null;
+    uid?: string;
+    desiredRole?: UserRole;
+  }): User {
+    const q = googleData.email.trim().toLowerCase();
+    let found = this.users.find(
+      (u) =>
+        (u.googleEmail && u.googleEmail.toLowerCase() === q) ||
+        (u.email && u.email.toLowerCase() === q)
+    );
+
+    if (found) {
+      if (!found.googleEmail) found.googleEmail = googleData.email;
+      this.currentUserId = found.id;
+      setDoc(doc(db, 'users', found.id), found, { merge: true }).catch((err) =>
+        console.warn('Firestore sync user error:', err)
+      );
+      this.notify();
+      return found;
+    }
+
+    // Create new user from Google Login
+    const baseName = googleData.displayName || googleData.email.split('@')[0];
+    const baseUsername = googleData.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '');
+
+    const newUser: User = {
+      id: googleData.uid ? `google_${googleData.uid}` : 'user_' + Date.now(),
+      name: baseName,
+      username: baseUsername || 'user_' + Math.floor(1000 + Math.random() * 9000),
+      email: googleData.email,
+      googleEmail: googleData.email,
+      password: 'pass_' + Math.floor(100000 + Math.random() * 900000),
+      phone: '',
+      whatsapp: '',
+      role: googleData.desiredRole || 'owner',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+
+    this.users.push(newUser);
+    this.currentUserId = newUser.id;
+    setDoc(doc(db, 'users', newUser.id), newUser).catch((err) =>
+      console.warn('Firestore register Google User error:', err)
+    );
+    this.notify();
+    return newUser;
+  }
+
   public getCurrentUser(): User | undefined {
     return this.users.find((u) => u.id === this.currentUserId);
   }

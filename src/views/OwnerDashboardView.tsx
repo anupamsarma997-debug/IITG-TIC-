@@ -18,6 +18,7 @@ import {
   MapPin, 
   BedDouble, 
   AlertTriangle, 
+  AlertCircle,
   CheckCircle2, 
   Wand2, 
   ChevronRight,
@@ -85,6 +86,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [ownerWhatsAppInput, setOwnerWhatsAppInput] = useState<string>('919876543210');
   const [ownerPhoneInput, setOwnerPhoneInput] = useState<string>('+91 9876543210');
+  const [formError, setFormError] = useState<string>('');
 
   // Handle local image file upload (converts images to Data URLs & appends to photoUrlsInput)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,6 +152,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
   // Open Form to Add New Property
   const handleOpenAdd = () => {
+    setFormError('');
     setEditingPropertyId(null);
     setTitle('');
     setDescription('');
@@ -183,6 +186,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
   // Open Form to Edit Existing Property
   const handleOpenEdit = (prop: Property) => {
+    setFormError('');
     setEditingPropertyId(prop.id);
     setTitle(prop.title);
     setDescription(prop.description);
@@ -239,6 +243,34 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   // Save Property Form Submit
   const handleSaveProperty = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+
+    // Client-side validations
+    if (!title.trim()) {
+      setFormError('⚠️ Please enter a Property Title / Name.');
+      return;
+    }
+
+    if (!description.trim()) {
+      setFormError('⚠️ Please provide a Property Description.');
+      return;
+    }
+
+    if (!city.trim()) {
+      setFormError('⚠️ Please specify the City / Location.');
+      return;
+    }
+
+    if (!editingPropertyId) {
+      if (!roomName.trim()) {
+        setFormError('⚠️ Please enter a Room Type Name for initial room setup.');
+        return;
+      }
+      if (!pricePerNight || pricePerNight <= 0) {
+        setFormError('⚠️ Please enter a valid Price Per Night greater than 0.');
+        return;
+      }
+    }
 
     const photosList = photoUrlsInput
       .split('\n')
@@ -917,21 +949,35 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
       {/* Modal: Add or Edit Property */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 relative my-8">
-            <button
-              onClick={() => setIsFormOpen(false)}
-              className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              <X className="w-5 h-5" />
-            </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 relative my-auto max-h-[92vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+                  {editingPropertyId ? 'Edit Property Listing' : 'Add New Hotel or Homestay'}
+                </h3>
+                <p className="text-[11px] text-slate-500">Fill details & publish directly to THIKANA marketplace.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <h3 className="text-lg font-black text-slate-900 dark:text-white mb-4">
-              {editingPropertyId ? 'Edit Property Listing' : 'Add New Hotel or Homestay'}
-            </h3>
-
-            <form onSubmit={handleSaveProperty} className="space-y-4">
+            <form onSubmit={handleSaveProperty} className="space-y-4 overflow-y-auto pr-1 flex-1">
               
+              {formError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1106,28 +1152,85 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
               {/* Photo & Video Upload URLs with Real Image File Picker */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                     Hotel / Homestay Real Photos (Gallery)
                   </label>
-                  <label className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer shadow-md flex items-center gap-1.5 transition-transform active:scale-95">
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    <span>+ Upload Real Photos</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    {photoUrlsInput && (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUrlsInput('')}
+                        className="text-[11px] text-rose-600 dark:text-rose-400 font-bold hover:underline"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                    <label className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl cursor-pointer shadow-md flex items-center gap-1.5 transition-transform active:scale-95">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>+ Upload Photos</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Quick Presets for Instant Demo Photos */}
+                <div className="flex flex-wrap items-center gap-1.5 p-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1">Quick Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const presets = [
+                        'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
+                        'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+                        'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80'
+                      ];
+                      setPhotoUrlsInput(presets.join('\n'));
+                    }}
+                    className="text-[10px] bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded-lg font-semibold hover:border-emerald-500 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    🌿 Assam Stilt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const presets = [
+                        'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
+                        'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80',
+                        'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80'
+                      ];
+                      setPhotoUrlsInput(presets.join('\n'));
+                    }}
+                    className="text-[10px] bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded-lg font-semibold hover:border-emerald-500 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    🏔️ Mountain View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const presets = [
+                        'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=800&q=80',
+                        'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?auto=format&fit=crop&w=800&q=80'
+                      ];
+                      setPhotoUrlsInput(presets.join('\n'));
+                    }}
+                    className="text-[10px] bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded-lg font-semibold hover:border-emerald-500 text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    🏡 Tea Cottage
+                  </button>
                 </div>
 
                 <textarea
                   rows={3}
                   value={photoUrlsInput}
                   onChange={(e) => setPhotoUrlsInput(e.target.value)}
-                  placeholder="Paste photo URLs (one per line) or use '+ Upload Real Photos' button above..."
+                  placeholder="Paste photo URLs (one per line) or click '+ Upload Photos' or choose a Quick Preset above..."
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-mono outline-none focus:ring-2 focus:ring-emerald-500"
                 />
 

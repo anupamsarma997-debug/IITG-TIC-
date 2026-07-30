@@ -136,6 +136,7 @@ export function App() {
           onOpenAddProperty={() => {
             setCurrentRole('owner');
             setCurrentView('home');
+            setAutoOpenAddProperty(true);
           }}
         />
 

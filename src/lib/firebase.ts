@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 // Safely attempt to load firebase-applet-config.json if present
 let config: Record<string, any> = {};
@@ -32,5 +32,6 @@ export const db = databaseId
   : getFirestore(app);
 
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
 export default app;
 

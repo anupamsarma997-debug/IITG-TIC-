@@ -177,16 +177,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>AI Guide</span>
             </button>
 
-            {/* Role Action Button */}
-            {currentRole === 'owner' && (
-              <button
-                onClick={onOpenAddProperty}
-                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-sm"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Add Homestay</span>
-              </button>
-            )}
+            {/* Add Property Button (Always Accessible) */}
+            <button
+              onClick={onOpenAddProperty}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-md hover:scale-105 cursor-pointer shrink-0"
+              title="List your Homestay or Hotel directly on THIKANA"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>+ Add Property</span>
+            </button>
 
             {/* Mobile View Toggle */}
             <button
@@ -276,17 +275,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
             <button
-              onClick={() => { onOpenAI(); setMobileMenuOpen(false); }}
-              className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold"
+              onClick={() => { onOpenAddProperty(); setMobileMenuOpen(false); }}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>AI Travel Guide</span>
+              <PlusCircle className="w-4 h-4" />
+              <span>+ List & Add New Property</span>
             </button>
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <MapPin className="w-3.5 h-3.5" />
-              <span>{selectedCity}</span>
+            <div className="flex items-center justify-between pt-1">
+              <button
+                onClick={() => { onOpenAI(); setMobileMenuOpen(false); }}
+                className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>AI Travel Guide</span>
+              </button>
+              <div className="flex items-center gap-1 text-xs text-slate-500">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>{selectedCity}</span>
+              </div>
             </div>
           </div>
         </div>

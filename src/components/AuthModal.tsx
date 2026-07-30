@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { store } from '../services/store';
 import { UserRole } from '../types';
 import { X, ShieldCheck, User as UserIcon, Mail, Lock, CheckCircle, KeyRound, RefreshCw, AlertCircle } from 'lucide-react';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '../lib/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -55,6 +57,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Helper notice if editing specific property
   const targetPropertyOwner = requiredOwnerId ? store.getUsers().find(u => u.id === requiredOwnerId) : null;
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage('');
+    try {
+      const res = await signInWithPopup(auth, googleProvider);
+      const gUser = res.user;
+      if (!gUser.email) {
+        setErrorMessage('Google account did not provide an email address.');
+        return;
+      }
+
+      const loggedInUser = store.loginOrRegisterWithGoogle({
+        email: gUser.email,
+        displayName: gUser.displayName,
+        photoURL: gUser.photoURL,
+        uid: gUser.uid,
+        desiredRole: role,
+      });
+
+      if (requiredOwnerId && loggedInUser.id !== requiredOwnerId && loggedInUser.role !== 'admin') {
+        setErrorMessage(`Permission Denied! You signed in as @${loggedInUser.username} (${loggedInUser.email}), but this property belongs to @${targetPropertyOwner?.username || targetPropertyOwner?.name || 'another host'}.`);
+        return;
+      }
+
+      if (onSuccessRole) {
+        onSuccessRole(loggedInUser.role);
+      }
+
+      alert(`🎉 Signed in successfully with Google!\n\nName: ${loggedInUser.name}\nEmail: ${loggedInUser.email}\nUsername: @${loggedInUser.username}`);
+      onClose();
+    } catch (err: any) {
+      console.error('Google Sign-In error:', err);
+      // Fallback if popup blocked
+      setErrorMessage(err?.message || 'Google Sign-In failed or popup was closed. Please try again.');
+    }
+  };
 
   const handleSendOTP = (e: React.FormEvent) => {
     e.preventDefault();
@@ -270,6 +308,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <span className="bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">
               @{targetPropertyOwner.username || 'owner'}
             </span>
+          </div>
+        )}
+
+        {/* 1-Click Real Google Auth Button */}
+        {mode !== 'reset' && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 text-slate-800 dark:text-white font-extrabold text-xs py-3 px-4 rounded-2xl shadow-sm hover:shadow transition-all cursor-pointer group"
+            >
+              <svg className="w-5 h-5 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3h3.88c2.28-2.1 3.665-5.2 3.665-9.12z" />
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z" />
+                <path fill="#FBBC05" d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.09z" />
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.09c.95-2.85 3.6-4.96 6.72-4.96z" />
+              </svg>
+              <span>Continue with Real Google Account</span>
+            </button>
+            <div className="relative my-4 text-center">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200 dark:border-slate-800"></div></div>
+              <span className="relative bg-white dark:bg-slate-900 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Or with Username & Password
+              </span>
+            </div>
           </div>
         )}
 
