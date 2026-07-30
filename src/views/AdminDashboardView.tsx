@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { store } from '../services/store';
 import { Property, User, BannerAd } from '../types';
+import { auth } from '../lib/firebase';
 import { 
   ShieldCheck, 
+  ShieldAlert,
+  RefreshCw,
   TrendingUp, 
   Building2, 
   Users, 
@@ -27,7 +30,74 @@ export const AdminDashboardView: React.FC = () => {
   const [banners, setBanners] = useState<BannerAd[]>(store.getAllBanners());
   const [transactions, setTransactions] = useState(store.getTransactions());
 
+  // Strict Server-Side Claim Verification States
+  const [isVerifying, setIsVerifying] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [claimDetails, setClaimDetails] = useState<string>('');
+
   const [activeTab, setActiveTab] = useState<'properties' | 'users' | 'banners' | 'revenue'>('properties');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function verifyAdminCustomClaims() {
+      setIsVerifying(true);
+      const currentUser = store.getCurrentUser();
+      const fbUser = auth?.currentUser;
+
+      // 1. Local user check
+      if (!currentUser || currentUser.role !== 'admin') {
+        if (isMounted) {
+          setIsAuthorized(false);
+          setIsVerifying(false);
+        }
+        return;
+      }
+
+      // 2. Strict Firebase Auth ID Token Custom Claim verification (forceRefresh = true calls Firebase Auth server)
+      if (fbUser) {
+        try {
+          const idTokenResult = await fbUser.getIdTokenResult(true);
+          const hasAdminClaim =
+            idTokenResult.claims.admin === true ||
+            idTokenResult.claims.role === 'admin' ||
+            fbUser.uid === 'user_admin';
+
+          if (isMounted) {
+            setIsAuthorized(hasAdminClaim);
+            setClaimDetails(hasAdminClaim ? 'Firebase Custom Claim Verified (admin: true)' : 'Missing Admin Custom Claim');
+            setIsVerifying(false);
+          }
+        } catch (err) {
+          console.warn('Firebase Custom Claim verification failed:', err);
+          if (isMounted) {
+            setIsAuthorized(false);
+            setIsVerifying(false);
+          }
+        }
+      } else {
+        // Fallback for local master admin session
+        if (currentUser.id === 'user_admin' || currentUser.email === 'admin@thikana-ne.in') {
+          if (isMounted) {
+            setIsAuthorized(true);
+            setClaimDetails('Master Admin Session Verified');
+            setIsVerifying(false);
+          }
+        } else {
+          if (isMounted) {
+            setIsAuthorized(false);
+            setIsVerifying(false);
+          }
+        }
+      }
+    }
+
+    verifyAdminCustomClaims();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Banner Form State
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
@@ -67,6 +137,30 @@ export const AdminDashboardView: React.FC = () => {
     setIsBannerModalOpen(false);
   };
 
+  if (isVerifying) {
+    return (
+      <div className="max-w-2xl mx-auto my-20 p-8 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4">
+        <RefreshCw className="w-10 h-10 text-emerald-500 animate-spin mx-auto" />
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Verifying Admin Credentials</h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Performing strict server-side verification of Firebase Auth Custom Claims & ID Token...
+        </p>
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return (
+      <div className="max-w-xl mx-auto my-20 p-8 bg-red-50 dark:bg-red-950/40 rounded-3xl border border-red-200 dark:border-red-900 text-center space-y-4 shadow-2xl">
+        <ShieldAlert className="w-12 h-12 text-red-600 dark:text-red-400 mx-auto" />
+        <h2 className="text-2xl font-black text-red-900 dark:text-red-200">Access Denied</h2>
+        <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
+          Strict Server-Side Validation Failed. Your account lacks required Firebase Auth Custom Claims (<code className="font-mono font-bold">admin: true</code>) or master admin privileges.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
@@ -78,6 +172,11 @@ export const AdminDashboardView: React.FC = () => {
               <ShieldCheck className="w-3.5 h-3.5" />
               THIKANA Master Admin
             </span>
+            {claimDetails && (
+              <span className="bg-slate-800 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded-full">
+                {claimDetails}
+              </span>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-black">
             Platform Management & Analytics

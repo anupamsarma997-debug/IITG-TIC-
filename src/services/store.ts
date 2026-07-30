@@ -15,16 +15,97 @@ const STORAGE_KEYS = {
   MOBILE_FRAME: 'thikana_mobile_frame_v1',
 };
 
-// Helper for secure password hashing (ensuring passwords are never stored or synced in plaintext)
-function hashPassword(pwd: string): string {
-  if (!pwd) return '';
-  let hash = 0;
-  for (let i = 0; i < pwd.length; i++) {
-    const char = pwd.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
+// Helper for cryptographic SHA-256 password hashing with salt
+function rightRotate(value: number, amount: number) {
+  return (value >>> amount) | (value << (32 - amount));
+}
+
+function sha256(ascii: string): string {
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  const lengthProperty = 'length';
+  let i, j;
+  let result = '';
+
+  const words: number[] = [];
+  const asciiBitLength = ascii[lengthProperty] * 8;
+
+  let hash: number[] = [];
+  const k: number[] = [];
+  let primeCounter = 0;
+
+  const isPrime = (candidate: number) => {
+    for (let factor = 2; factor * factor <= candidate; factor++) {
+      if (candidate % factor === 0) return false;
+    }
+    return true;
+  };
+
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (isPrime(candidate)) {
+      if (primeCounter < 8) {
+        hash[primeCounter] = (mathPow(candidate, 1 / 2) * maxWord) | 0;
+      }
+      k[primeCounter] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+      primeCounter++;
+    }
   }
-  return 'sha256_' + Math.abs(hash).toString(16) + '_' + pwd.length;
+
+  ascii += '\x80';
+  while ((ascii[lengthProperty] % 64) - 56) ascii += '\x00';
+  for (i = 0; i < ascii[lengthProperty]; i++) {
+    j = ascii.charCodeAt(i);
+    words[i >> 2] |= j << ((3 - (i % 4)) * 8);
+  }
+  words[words[lengthProperty]] = (asciiBitLength / maxWord) | 0;
+  words[words[lengthProperty]] = asciiBitLength;
+
+  for (j = 0; j < words[lengthProperty];) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = hash.slice(0);
+
+    for (i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2];
+      const a = hash[0], e = hash[4];
+      const temp1 =
+        hash[7] +
+        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+        ((e & hash[5]) ^ (~e & hash[6])) +
+        k[i] +
+        (w[i] =
+          i < 16
+            ? w[i]
+            : (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
+
+      const temp2 =
+        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+        ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+    }
+
+    for (i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+
+  for (i = 0; i < 8; i++) {
+    for (j = 3; j >= 0; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += (b < 16 ? '0' : '') + b.toString(16);
+    }
+  }
+  return result;
+}
+
+export function hashPassword(pwd: string): string {
+  if (!pwd) return '';
+  return sha256('thikana_secure_salt_2026_' + pwd);
 }
 
 // Helper to sanitize user object before sending to Firestore (strips password completely)
@@ -79,7 +160,16 @@ class DataStore {
   private initData() {
     try {
       const storedUsers = localStorage.getItem(STORAGE_KEYS.USERS);
-      this.users = storedUsers ? JSON.parse(storedUsers) : INITIAL_USERS;
+      const rawUsers: User[] = storedUsers ? JSON.parse(storedUsers) : INITIAL_USERS;
+      this.users = rawUsers.map((u) => {
+        const userObj = { ...u };
+        if (!userObj.passwordHash) {
+          const fallbackPass = (userObj as any).password || (userObj.role === 'admin' ? 'admin123' : 'pass123');
+          userObj.passwordHash = hashPassword(fallbackPass);
+        }
+        delete (userObj as any).password;
+        return userObj;
+      });
 
       const storedProps = localStorage.getItem(STORAGE_KEYS.PROPERTIES);
       this.properties = storedProps ? JSON.parse(storedProps) : INITIAL_PROPERTIES;
