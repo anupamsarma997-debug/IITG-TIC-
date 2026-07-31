@@ -146,7 +146,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
       }
 
       // Rating Filter
-      if (p.rating < minRating) return false;
+      if ((p?.rating ?? 5.0) < minRating) return false;
 
       // Verified Filter
       if (onlyVerified && !p.isVerified) return false;
@@ -158,7 +158,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
     }).sort((a, b) => {
       if (a.isFeatured && !b.isFeatured) return -1;
       if (!a.isFeatured && b.isFeatured) return 1;
-      return b.rating - a.rating;
+      return (b?.rating ?? 5.0) - (a?.rating ?? 5.0);
     });
   }, [properties, selectedState, selectedCity, searchQuery, selectedPriceRange, maxPrice, selectedType, minRating, onlyVerified, onlyFeatured, propertyPrices]);
 

@@ -39,7 +39,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({ isOpen, onCl
         title: p.title,
         city: p.city,
         type: p.propertyType,
-        rating: p.rating,
+        rating: p?.rating ?? 5.0,
         verified: p.isVerified,
         featured: p.isFeatured,
       }));

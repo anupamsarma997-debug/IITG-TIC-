@@ -89,8 +89,8 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
         {/* Rating Badge */}
         <div className="absolute bottom-3 right-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-2.5 py-1 rounded-lg text-xs font-black shadow-md flex items-center gap-1">
           <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-          <span>{property.rating.toFixed(1)}</span>
-          <span className="text-[10px] text-slate-400 font-normal">({property.reviewsCount})</span>
+          <span>{(typeof property?.rating === 'number' ? property.rating : 5.0).toFixed(1)}</span>
+          <span className="text-[10px] text-slate-400 font-normal">({property?.reviewsCount ?? 0})</span>
         </div>
 
         {/* Photo Switcher Dots */}

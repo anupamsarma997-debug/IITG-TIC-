@@ -155,6 +155,12 @@ function syncPublicProfile(user: User) {
   ).catch((err) => console.warn('Public profile sync notice:', err));
 }
 
+const normalizeProperty = (p: any): Property => ({
+  ...p,
+  rating: typeof p?.rating === 'number' && !isNaN(p.rating) ? p.rating : 5.0,
+  reviewsCount: typeof p?.reviewsCount === 'number' && !isNaN(p.reviewsCount) ? p.reviewsCount : 1,
+});
+
 class DataStore {
   private users: User[] = [];
   private properties: Property[] = [];
@@ -190,7 +196,8 @@ class DataStore {
       });
 
       const storedProps = localStorage.getItem(STORAGE_KEYS.PROPERTIES);
-      this.properties = storedProps ? JSON.parse(storedProps) : INITIAL_PROPERTIES;
+      const rawProps = storedProps ? JSON.parse(storedProps) : INITIAL_PROPERTIES;
+      this.properties = (Array.isArray(rawProps) ? rawProps : INITIAL_PROPERTIES).map(normalizeProperty);
 
       const storedRooms = localStorage.getItem(STORAGE_KEYS.ROOMS);
       this.rooms = storedRooms ? JSON.parse(storedRooms) : INITIAL_ROOMS;
@@ -231,7 +238,7 @@ class DataStore {
         if (!snapshot.empty) {
           const remoteProps: Property[] = [];
           snapshot.forEach((docSnap) => {
-            remoteProps.push({ id: docSnap.id, ...docSnap.data() } as Property);
+            remoteProps.push(normalizeProperty({ id: docSnap.id, ...docSnap.data() }));
           });
           if (remoteProps.length > 0) {
             const propMap = new Map<string, Property>();
