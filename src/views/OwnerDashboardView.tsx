@@ -188,6 +188,15 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
 
   // Open Form to Add New Property
   const handleOpenAdd = () => {
+    const user = store.getCurrentUser();
+    if (!user) {
+      setAuthRequiredOwnerId(undefined);
+      setAuthTargetTitle("Listing New Property");
+      setPendingAction(() => () => handleOpenAdd());
+      setAuthModalOpen(true);
+      return;
+    }
+
     setFormError('');
     setEditingPropertyId(null);
     setTitle('');
@@ -204,8 +213,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     setCheckOutTime('11:00 AM');
     setPhotoUrlsInput('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80\nhttps://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80');
     setVideoUrl('');
-    setOwnerPhoneInput(currentUser?.phone || '+91 9876543210');
-    setOwnerWhatsAppInput(currentUser?.whatsapp || '919876543210');
+    setOwnerPhoneInput(user.phone || '+91 9876543210');
+    setOwnerWhatsAppInput(user.whatsapp || '919876543210');
 
     // Pre-fill initial room setup
     setRoomName('Traditional Bamboo Stilt (Chang Ghar) Suite');
@@ -335,8 +344,15 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    const ownerId = currentUser ? currentUser.id : 'owner-demo';
-    const ownerName = currentUser ? currentUser.name : 'Homestay Host';
+    const user = store.getCurrentUser();
+    if (!user) {
+      setFormError('⚠️ Authentication required! Please log in or sign up to list a property.');
+      setAuthModalOpen(true);
+      return;
+    }
+
+    const ownerId = user.id;
+    const ownerName = user.name;
     const finalPhone = ownerPhoneInput.trim() || '+91 9876543210';
     const finalWhatsApp = ownerWhatsAppInput.trim() || '919876543210';
 

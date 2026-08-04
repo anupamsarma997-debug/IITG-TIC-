@@ -2,6 +2,7 @@ import { Property, RoomType, BannerAd, User, UserRole, BookingEnquiry, Subscript
 import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INITIAL_TRANSACTIONS } from '../data/initialData';
 import { db, auth } from '../lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 const STORAGE_KEYS = {
   USERS: 'thikana_users_v1',
@@ -233,6 +234,24 @@ class DataStore {
 
   private initFirebaseListeners() {
     try {
+      // Sync Firebase Auth state with DataStore currentUserId
+      onAuthStateChanged(auth, (fbUser) => {
+        if (fbUser) {
+          const existing = this.users.find(
+            (u) =>
+              u.id === fbUser.uid ||
+              u.id === `google_${fbUser.uid}` ||
+              u.googleUid === fbUser.uid ||
+              (fbUser.email && u.email?.toLowerCase() === fbUser.email.toLowerCase())
+          );
+          if (existing) {
+            this.currentUserId = existing.id;
+            this.persist();
+            this.notify(false);
+          }
+        }
+      });
+
       // Sync properties collection from Firestore
       onSnapshot(collection(db, 'properties'), (snapshot) => {
         if (!snapshot.empty) {
@@ -357,6 +376,13 @@ class DataStore {
   }
 
   // Auth & User Management
+  public logout(): void {
+    this.currentUserId = '';
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+    signOut(auth).catch((err) => console.warn('Firebase signOut notice:', err));
+    this.notify();
+  }
+
   public loginOrRegisterWithGoogle(googleData: {
     email: string;
     displayName?: string | null;
@@ -732,18 +758,26 @@ class DataStore {
     return newProp;
   }
 
-  public updateProperty(id: string, updates: Partial<Property>) {
+  public updateProperty(id: string, updates: Partial<Property>): { success: boolean; status?: number; message?: string } {
     const idx = this.properties.findIndex((p) => p.id === id);
-    if (idx !== -1) {
-      const currentUser = this.getCurrentUser();
-      if (currentUser && !this.isOwnerOfProperty(currentUser.id, id)) {
-        console.warn('Unauthorized property update blocked:', id);
-        return;
-      }
-      this.properties[idx] = { ...this.properties[idx], ...updates };
-      setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
-      this.notify();
+    if (idx === -1) {
+      return { success: false, status: 404, message: 'Property not found.' };
     }
+
+    const currentUser = this.getCurrentUser();
+    if (!currentUser || !this.isOwnerOfProperty(currentUser.id, id)) {
+      console.error('403 Forbidden: Unauthorized property update blocked for id:', id);
+      return { 
+        success: false, 
+        status: 403, 
+        message: '403 Forbidden: You do not have permission to modify this property listing.' 
+      };
+    }
+
+    this.properties[idx] = { ...this.properties[idx], ...updates };
+    setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
+    this.notify();
+    return { success: true, message: 'Property updated successfully.' };
   }
 
   public togglePropertyStatus(id: string) {
@@ -797,12 +831,22 @@ class DataStore {
     }
   }
 
-  public deleteProperty(id: string) {
-    const currentUser = this.getCurrentUser();
-    if (currentUser && !this.isOwnerOfProperty(currentUser.id, id)) {
-      console.warn('Unauthorized property deletion blocked:', id);
-      return;
+  public deleteProperty(id: string): { success: boolean; status?: number; message?: string } {
+    const prop = this.getPropertyById(id);
+    if (!prop) {
+      return { success: false, status: 404, message: 'Property not found.' };
     }
+
+    const currentUser = this.getCurrentUser();
+    if (!currentUser || !this.isOwnerOfProperty(currentUser.id, id)) {
+      console.error('403 Forbidden: Unauthorized property deletion blocked for id:', id);
+      return { 
+        success: false, 
+        status: 403, 
+        message: '403 Forbidden: You do not have permission to delete this property listing.' 
+      };
+    }
+
     this.properties = this.properties.filter((p) => p.id !== id);
     const deletedRooms = this.rooms.filter((r) => r.propertyId === id);
     this.rooms = this.rooms.filter((r) => r.propertyId !== id);
@@ -811,6 +855,7 @@ class DataStore {
     deletedRooms.forEach((r) => deleteDoc(doc(db, 'rooms', r.id)).catch(() => {}));
     
     this.notify();
+    return { success: true, message: 'Property deleted successfully.' };
   }
 
   public renewPropertySubscription(propertyId: string, daysToAdd = 30, planName = 'Standard Listing Plan') {

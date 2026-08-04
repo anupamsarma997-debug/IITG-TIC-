@@ -32,10 +32,10 @@ service cloud.firestore {
     // Schema Validation Helpers
     function isValidProperty() {
       let data = request.resource.data;
-      return data.keys().hasAll(['title', 'ownerId', 'city', 'pricePerNight']) &&
+      return data.keys().hasAll(['title', 'ownerId', 'city']) &&
         data.title is string && data.title.size() <= 200 &&
         data.city is string && data.city.size() <= 100 &&
-        data.pricePerNight is number && data.pricePerNight >= 0 &&
+        (!('pricePerNight' in data) || (data.pricePerNight is number && data.pricePerNight >= 0)) &&
         (!('description' in data) || (data.description is string && data.description.size() <= 5000));
     }
 
