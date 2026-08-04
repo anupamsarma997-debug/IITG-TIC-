@@ -356,72 +356,79 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     const finalPhone = ownerPhoneInput.trim() || '+91 9876543210';
     const finalWhatsApp = ownerWhatsAppInput.trim() || '919876543210';
 
-    if (editingPropertyId) {
-      // Update
-      store.updateProperty(editingPropertyId, {
-        title,
-        description,
-        propertyType,
-        address,
-        city,
-        state: stateName,
-        latitude,
-        longitude,
-        googleMapUrl,
-        photos: photosList,
-        videoUrl,
-        nearbyAttractions: attractionsList,
-        checkInTime,
-        checkOutTime,
-        ownerPhone: finalPhone,
-        ownerWhatsApp: finalWhatsApp,
-      });
-      alert('Property updated successfully with Firebase sync!');
-    } else {
-      // Create New
-      const newProp = store.addProperty({
-        title,
-        description,
-        propertyType,
-        address,
-        city,
-        state: stateName,
-        latitude,
-        longitude,
-        googleMapUrl,
-        photos: photosList,
-        videoUrl,
-        nearbyAttractions: attractionsList,
-        checkInTime,
-        checkOutTime,
-        ownerId,
-        ownerName,
-        ownerPhone: finalPhone,
-        ownerWhatsApp: finalWhatsApp,
-      });
+    try {
+      if (editingPropertyId) {
+        // Update
+        store.updateProperty(editingPropertyId, {
+          title,
+          description,
+          propertyType,
+          address,
+          city,
+          state: stateName,
+          latitude,
+          longitude,
+          googleMapUrl,
+          photos: photosList,
+          videoUrl,
+          nearbyAttractions: attractionsList,
+          checkInTime,
+          checkOutTime,
+          ownerPhone: finalPhone,
+          ownerWhatsApp: finalWhatsApp,
+        });
+        alert('Property updated successfully!');
+      } else {
+        // Create New
+        const newProp = store.addProperty({
+          title,
+          description,
+          propertyType,
+          address,
+          city,
+          state: stateName,
+          latitude,
+          longitude,
+          googleMapUrl,
+          photos: photosList,
+          videoUrl,
+          nearbyAttractions: attractionsList,
+          checkInTime,
+          checkOutTime,
+          ownerId,
+          ownerName,
+          ownerPhone: finalPhone,
+          ownerWhatsApp: finalWhatsApp,
+        });
 
-      // Automatically add default room type with host's specified room name & pricing
-      const amList = roomAmenities
-        ? roomAmenities.split(',').map((s) => s.trim()).filter(Boolean)
-        : ['Free WiFi', 'Hot Shower', 'Clean Linen'];
+        if (newProp && newProp.id) {
+          // Automatically add default room type with host's specified room name & pricing
+          const amList = roomAmenities
+            ? roomAmenities.split(',').map((s) => s.trim()).filter(Boolean)
+            : ['Free WiFi', 'Hot Shower', 'Clean Linen'];
 
-      store.addRoomType({
-        propertyId: newProp.id,
-        roomName: roomName || 'Standard Room',
-        pricePerNight: pricePerNight || 2000,
-        discountPrice: discountPrice || pricePerNight || 1800,
-        maxGuests: maxGuests || 2,
-        description: roomDescription || 'Clean room with hot shower and warm hospitality.',
-        amenities: amList,
-        roomSize: roomSize || '250 sq.ft.',
-        bedType: bedType || 'Double Bed',
-      });
+          store.addRoomType({
+            propertyId: newProp.id,
+            roomName: roomName || 'Standard Room',
+            pricePerNight: pricePerNight || 2000,
+            discountPrice: discountPrice || pricePerNight || 1800,
+            maxGuests: maxGuests || 2,
+            description: roomDescription || 'Clean room with hot shower and warm hospitality.',
+            amenities: amList,
+            roomSize: roomSize || '250 sq.ft.',
+            bedType: bedType || 'Double Bed',
+          });
+        }
 
-      setFilterMode('all');
-      alert(`🎉 Property "${newProp.title}" listed & published successfully!\n\nIt is now saved in Firebase and live on the Home Page and All Listings.`);
+        setFilterMode('all');
+        alert(`🎉 Property "${newProp?.title || title}" listed & published successfully!\n\nIt is now saved and live on the Home Page and All Listings.`);
+      }
+
+      setIsFormOpen(false);
+    } catch (err: any) {
+      console.error('Error saving property:', err);
+      setFormError(`⚠️ Error saving property: ${err?.message || 'Unable to save property. Please try again.'}`);
     }
-
-    setIsFormOpen(false);
   };
 
   // Open Modal to Add Room Type

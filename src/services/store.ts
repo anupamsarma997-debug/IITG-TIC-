@@ -744,7 +744,13 @@ class DataStore {
     this.properties.push(newProp);
 
     // Write to Firestore
-    setDoc(doc(db, 'properties', newProp.id), newProp).catch((err) => console.warn('Firestore addProperty error:', err));
+    try {
+      if (db) {
+        setDoc(doc(db, 'properties', newProp.id), newProp).catch((err) => console.warn('Firestore addProperty error:', err));
+      }
+    } catch (err) {
+      console.warn('Firestore addProperty sync error:', err);
+    }
 
     this.addTransaction({
       ownerId: newProp.ownerId,
@@ -783,7 +789,13 @@ class DataStore {
     delete safeUpdates.ownerUid;
 
     this.properties[idx] = { ...this.properties[idx], ...safeUpdates };
-    setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
+    try {
+      if (db) {
+        setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
+      }
+    } catch (err) {
+      console.warn('Firestore updateProperty sync error:', err);
+    }
     this.notify();
     return { success: true, message: 'Property updated successfully.' };
   }
