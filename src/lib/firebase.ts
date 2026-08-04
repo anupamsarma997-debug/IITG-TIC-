@@ -27,18 +27,18 @@ let app: any;
 try {
   app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 } catch (e) {
-  console.warn('Firebase initializeApp fallback:', e);
+  console.warn('Firebase initializeApp warning:', e);
   app = getApps().length ? getApp() : initializeApp({
-    apiKey: 'AIzaSyC4NBXm7XoJKGvh5JY4OSHK7NYco2ntJsM',
-    projectId: 'peak-ego-v224x',
+    apiKey: firebaseConfig.apiKey,
+    projectId: firebaseConfig.projectId,
   }, 'fallback-app');
 }
 
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId || 'ai-studio-thikana-9c4578c1-2846-48dc-b655-1dd95d3749bb';
+const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
 
 export let db: any;
 try {
-  db = databaseId ? initializeFirestore(app, {}, databaseId) : getFirestore(app);
+  db = databaseId && databaseId !== '(default)' ? initializeFirestore(app, {}, databaseId) : getFirestore(app);
 } catch (e) {
   try {
     db = getFirestore(app);

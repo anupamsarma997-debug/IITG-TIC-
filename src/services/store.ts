@@ -235,22 +235,24 @@ class DataStore {
   private initFirebaseListeners() {
     try {
       // Sync Firebase Auth state with DataStore currentUserId
-      onAuthStateChanged(auth, (fbUser) => {
-        if (fbUser) {
-          const existing = this.users.find(
-            (u) =>
-              u.id === fbUser.uid ||
-              u.id === `google_${fbUser.uid}` ||
-              u.googleUid === fbUser.uid ||
-              (fbUser.email && u.email?.toLowerCase() === fbUser.email.toLowerCase())
-          );
-          if (existing) {
-            this.currentUserId = existing.id;
-            this.persist();
-            this.notify(false);
+      if (auth) {
+        onAuthStateChanged(auth, (fbUser) => {
+          if (fbUser) {
+            const existing = this.users.find(
+              (u) =>
+                u.id === fbUser.uid ||
+                u.id === `google_${fbUser.uid}` ||
+                u.googleUid === fbUser.uid ||
+                (fbUser.email && u.email?.toLowerCase() === fbUser.email.toLowerCase())
+            );
+            if (existing) {
+              this.currentUserId = existing.id;
+              this.persist();
+              this.notify(false);
+            }
           }
-        }
-      });
+        });
+      }
 
       // Sync properties collection from Firestore
       onSnapshot(collection(db, 'properties'), (snapshot) => {
@@ -718,8 +720,9 @@ class DataStore {
     const price = planType === 'standard_1500' ? 1500 : 1000;
 
     const firebaseUid = auth.currentUser?.uid;
-    const ownerUid = prop.ownerUid || firebaseUid || (prop.ownerId.startsWith('google_') ? prop.ownerId.replace('google_', '') : prop.ownerId);
-    const ownerId = prop.ownerId || (firebaseUid ? `google_${firebaseUid}` : 'owner-demo');
+    const currentUser = this.getCurrentUser();
+    const ownerUid = firebaseUid || currentUser?.googleUid || prop.ownerUid || currentUser?.id;
+    const ownerId = firebaseUid || currentUser?.id || prop.ownerId;
 
     const newProp: Property = {
       ...prop,
@@ -744,8 +747,8 @@ class DataStore {
     setDoc(doc(db, 'properties', newProp.id), newProp).catch((err) => console.warn('Firestore addProperty error:', err));
 
     this.addTransaction({
-      ownerId: prop.ownerId,
-      ownerName: prop.ownerName,
+      ownerId: newProp.ownerId,
+      ownerName: newProp.ownerName,
       propertyId: newProp.id,
       propertyName: newProp.title,
       type: planType,
@@ -774,7 +777,12 @@ class DataStore {
       };
     }
 
-    this.properties[idx] = { ...this.properties[idx], ...updates };
+    // Strip ownerId and ownerUid to enforce ownership immutability
+    const safeUpdates = { ...updates };
+    delete safeUpdates.ownerId;
+    delete safeUpdates.ownerUid;
+
+    this.properties[idx] = { ...this.properties[idx], ...safeUpdates };
     setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
     this.notify();
     return { success: true, message: 'Property updated successfully.' };

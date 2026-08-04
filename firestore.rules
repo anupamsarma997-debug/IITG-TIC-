@@ -23,8 +23,6 @@ service cloud.firestore {
       return isSignedIn() && (
         ownerUid == request.auth.uid ||
         ownerId == request.auth.uid ||
-        ownerId == ('google_' + request.auth.uid) ||
-        ownerId == ('user_' + request.auth.uid) ||
         isAdmin()
       );
     }
@@ -72,7 +70,11 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidProperty() && (
         isOwner(request.resource.data.get('ownerId', ''), request.resource.data.get('ownerUid', ''))
       );
-      allow update, delete: if isSignedIn() && (
+      allow update: if isSignedIn() && (
+        isOwner(resource.data.get('ownerId', ''), resource.data.get('ownerUid', '')) &&
+        request.resource.data.get('ownerId', '') == resource.data.get('ownerId', '')
+      );
+      allow delete: if isSignedIn() && (
         isOwner(resource.data.get('ownerId', ''), resource.data.get('ownerUid', ''))
       );
     }
