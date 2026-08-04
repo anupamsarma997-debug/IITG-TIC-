@@ -14,13 +14,16 @@ try {
   // Config file omitted or ignored in Git
 }
 
+const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey;
+const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId;
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey || 'AIzaSyC4NBXm7XoJKGvh5JY4OSHK7NYco2ntJsM',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain || 'peak-ego-v224x.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId || 'peak-ego-v224x',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket || 'peak-ego-v224x.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId || '514524067934',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId || '1:514524067934:web:82e09fc2948bd107d89ccf',
+  apiKey: apiKey || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain || (projectId ? `${projectId}.firebaseapp.com` : ''),
+  projectId: projectId || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket || (projectId ? `${projectId}.firebasestorage.app` : ''),
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId || '',
 };
 
 let app: any;
