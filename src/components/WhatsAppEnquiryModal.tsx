@@ -133,8 +133,12 @@ ${specialRequests ? `📝 *Special Request:* ${specialRequests}\n` : ''}I want t
     });
 
     // Track Lead for QR referral & conversion analytics
-    const activeRefId = sessionStorage.getItem('thikana_current_refId') || property.ownerId || 'direct';
-    store.trackLead(property.id, activeRefId, customerName, activeRefId !== 'direct' ? 'qr_referral' : 'whatsapp');
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const urlRef = urlParams ? (urlParams.get('ref') || urlParams.get('refId')) : null;
+    const savedRef = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('thikana_current_refId') : null;
+    const activeRefId = urlRef || savedRef || 'direct';
+    const source = activeRefId !== 'direct' ? 'qr_referral' : 'whatsapp';
+    store.trackLead(property.id, activeRefId, customerName, source);
 
     // Clean owner phone number (remove +, spaces, leading zeros if 10 digits add 91)
     let cleanPhone = property.ownerWhatsApp || property.ownerPhone || '919816012345';

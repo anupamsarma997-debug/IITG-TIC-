@@ -40,27 +40,47 @@ export function App() {
     });
   }, []);
 
+  const hasTrackedVisitRef = React.useRef<boolean>(false);
+
   // Handle QR scan / referral link parameters on URL load
   useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const propertyId = params.get('p') || params.get('propertyId') || params.get('property');
-      const refId = params.get('ref') || params.get('refId');
+    const handleUrlTracking = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const propertyId = params.get('p') || params.get('propertyId') || params.get('property');
+        const refId = params.get('ref') || params.get('refId');
 
-      if (propertyId) {
-        const found = store.getPropertyById(propertyId);
-        if (found) {
-          setSelectedProperty(found);
-          setCurrentView('property-detail');
+        if (propertyId) {
+          const found = store.getPropertyById(propertyId);
+          if (found) {
+            setSelectedProperty(found);
+            setCurrentView('property-detail');
+          }
+
           if (refId) {
-            store.trackVisit(propertyId, refId, 'qr_referral');
             sessionStorage.setItem('thikana_current_refId', refId);
+
+            if (!hasTrackedVisitRef.current) {
+              hasTrackedVisitRef.current = true;
+              store.trackVisit(propertyId, refId, 'qr_referral');
+            }
           }
         }
+      } catch (e) {
+        console.warn('URL search parse error:', e);
       }
-    } catch (e) {
-      console.warn('URL search parse error:', e);
-    }
+    };
+
+    handleUrlTracking();
+
+    // Subscribe to store updates in case properties are loaded asynchronously from Firestore
+    const unsubscribe = store.subscribe(() => {
+      handleUrlTracking();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Update HTML class for dark theme
