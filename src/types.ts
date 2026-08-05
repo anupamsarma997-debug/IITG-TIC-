@@ -121,3 +121,21 @@ export interface SubscriptionTransaction {
   validUntil?: string;
   createdAt?: string;
 }
+
+export interface PropertyVisit {
+  id: string;
+  propertyId: string;
+  refId: string;
+  timestamp: string;
+  source?: 'qr_referral' | 'direct' | 'search';
+}
+
+export interface PropertyLead {
+  id: string;
+  propertyId: string;
+  refId: string;
+  customerName?: string;
+  timestamp: string;
+  source?: 'qr_referral' | 'direct' | 'whatsapp';
+}
+

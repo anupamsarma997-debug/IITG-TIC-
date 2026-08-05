@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Property, RoomType, User } from '../types';
 import { store } from '../services/store';
 import { AuthModal } from '../components/AuthModal';
+import { QRPerformanceCard } from '../components/QRPerformanceCard';
 import { 
   Building2, 
   PlusCircle, 
@@ -26,7 +27,8 @@ import {
   Zap,
   Loader2,
   X,
-  Lock
+  Lock,
+  QrCode
 } from 'lucide-react';
 
 interface OwnerDashboardViewProps {
@@ -158,7 +160,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   const [roomAmenities, setRoomAmenities] = useState('Balcony View, Free High-Speed WiFi, Hot Shower, Room Heater');
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'properties' | 'subscriptions' | 'leads'>('properties');
+  const [activeTab, setActiveTab] = useState<'properties' | 'subscriptions' | 'leads' | 'qr-codes'>('properties');
   const [filterMode, setFilterMode] = useState<'all' | 'my'>('my');
 
   React.useEffect(() => {
@@ -545,10 +547,10 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
         <button
           onClick={() => setActiveTab('properties')}
-          className={`flex-1 py-3 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
+          className={`py-3 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
             activeTab === 'properties' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'
           }`}
         >
@@ -557,23 +559,33 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('qr-codes')}
+          className={`py-3 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'qr-codes' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'
+          }`}
+        >
+          <QrCode className="w-4 h-4" />
+          <span>Smart QR & Scans</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('subscriptions')}
-          className={`flex-1 py-3 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
+          className={`py-3 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
             activeTab === 'subscriptions' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'
           }`}
         >
           <Calendar className="w-4 h-4" />
-          <span>Listing Subscriptions & Badges</span>
+          <span>Subscriptions & Badges</span>
         </button>
 
         <button
           onClick={() => setActiveTab('leads')}
-          className={`flex-1 py-3 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
+          className={`py-3 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
             activeTab === 'leads' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'
           }`}
         >
           <MessageCircle className="w-4 h-4" />
-          <span>WhatsApp Enquiry Leads ({enquiries.length})</span>
+          <span>WhatsApp Leads ({enquiries.length})</span>
         </button>
       </div>
 
@@ -783,7 +795,15 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                     </div>
 
                     {/* Property Footer Actions */}
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => setActiveTab('qr-codes')}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow transition-transform active:scale-95 flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        <span>QR & Gate Poster</span>
+                      </button>
+
                       <button
                         onClick={() => handleBuyAddon(property.id, 'verified')}
                         disabled={property.isVerified}
@@ -825,7 +845,50 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         </div>
       )}
 
-      {/* Tab 2: Subscription Plans & Badges */}
+      {/* Tab 2: Smart QR Codes & Analytics */}
+      {activeTab === 'qr-codes' && (
+        <div className="space-y-6">
+          <div className="text-center max-w-2xl mx-auto space-y-2">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center justify-center gap-2">
+              <QrCode className="w-6 h-6 text-emerald-500" />
+              <span>Smart QR Code & Referral Hub</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Download high-resolution QR codes for your homestay, print gate posters, and track scan conversion rates in real time. Reach 5 WhatsApp leads to unlock a <strong>FREE Top Search Boost</strong>!
+            </p>
+          </div>
+
+          {properties.length > 0 ? (
+            <div className="space-y-6">
+              {properties.map((property) => (
+                <QRPerformanceCard
+                  key={property.id}
+                  property={property}
+                  ownerRefId={currentUser?.id || property.ownerId}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 text-center border border-slate-200 dark:border-slate-700 space-y-3">
+              <QrCode className="w-12 h-12 text-slate-400 mx-auto" />
+              <h4 className="font-extrabold text-base text-slate-900 dark:text-white">
+                No Properties Found
+              </h4>
+              <p className="text-xs text-slate-500">
+                List your first homestay or hotel to generate your custom QR code & referral tracking links.
+              </p>
+              <button
+                onClick={handleOpenAdd}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer"
+              >
+                Add Your Property
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: Subscription Plans & Badges */}
       {activeTab === 'subscriptions' && (
         <div className="space-y-6">
           <div className="text-center max-w-xl mx-auto space-y-2">

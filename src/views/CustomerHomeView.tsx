@@ -92,10 +92,14 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
   // Cache minimum prices for properties
   const propertyPrices = useMemo(() => {
     const priceMap: Record<string, number> = {};
-    properties.forEach((p) => {
-      const rooms = store.getRoomsByProperty(p.id);
+    (properties || []).forEach((p) => {
+      if (!p || !p.id) return;
+      const rooms = store.getRoomsByProperty(p.id) || [];
       if (rooms.length > 0) {
-        priceMap[p.id] = Math.min(...rooms.map((r) => r.discountPrice || r.pricePerNight));
+        const validPrices = rooms
+          .map((r) => r.discountPrice || r.pricePerNight)
+          .filter((price): price is number => typeof price === 'number' && !isNaN(price) && price > 0);
+        priceMap[p.id] = validPrices.length > 0 ? Math.min(...validPrices) : 1500;
       } else {
         priceMap[p.id] = 1500;
       }
@@ -105,33 +109,40 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
 
   // Filter properties logic
   const filteredProperties = useMemo(() => {
-    return properties.filter((p) => {
+    return (properties || []).filter((p) => {
+      if (!p || typeof p !== 'object') return false;
       // Must be active
       if (p.status !== 'active') return false;
 
+      const pState = (p.state || '').toLowerCase();
+      const pCity = (p.city || '').toLowerCase();
+      const pTitle = (p.title || '').toLowerCase();
+      const pAddress = (p.address || '').toLowerCase();
+      const pType = (p.propertyType || '').toLowerCase();
+
       // State filter
-      if (selectedState && selectedState !== 'All States' && p.state.toLowerCase() !== selectedState.toLowerCase()) {
+      if (selectedState && selectedState !== 'All States' && pState !== selectedState.toLowerCase()) {
         return false;
       }
 
       // City filter
-      if (selectedCity && selectedCity !== 'All Locations' && p.city.toLowerCase() !== selectedCity.toLowerCase()) {
+      if (selectedCity && selectedCity !== 'All Locations' && pCity !== selectedCity.toLowerCase()) {
         return false;
       }
 
       // Search Query (City, Title, Address, State, Type)
-      if (searchQuery.trim()) {
+      if (searchQuery && searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchTitle = p.title.toLowerCase().includes(q);
-        const matchCity = p.city.toLowerCase().includes(q);
-        const matchAddress = p.address.toLowerCase().includes(q);
-        const matchState = p.state.toLowerCase().includes(q);
-        const matchType = p.propertyType.toLowerCase().includes(q);
+        const matchTitle = pTitle.includes(q);
+        const matchCity = pCity.includes(q);
+        const matchAddress = pAddress.includes(q);
+        const matchState = pState.includes(q);
+        const matchType = pType.includes(q);
         if (!matchTitle && !matchCity && !matchAddress && !matchState && !matchType) return false;
       }
 
       // Price Range Filter Chip
-      const price = propertyPrices[p.id] || 1500;
+      const price = propertyPrices[p.id] ?? 1500;
       if (selectedPriceRange === 'under-1500' && price > 1500) return false;
       if (selectedPriceRange === '1500-3000' && (price < 1500 || price > 3000)) return false;
       if (selectedPriceRange === '3000-5000' && (price < 3000 || price > 5000)) return false;
@@ -141,12 +152,13 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
       if (price > maxPrice) return false;
 
       // Property Type Filter
-      if (selectedType !== 'All' && p.propertyType !== selectedType) {
+      if (selectedType && selectedType !== 'All' && pType !== selectedType.toLowerCase()) {
         return false;
       }
 
       // Rating Filter
-      if ((p?.rating ?? 5.0) < minRating) return false;
+      const rating = typeof p.rating === 'number' && !isNaN(p.rating) ? p.rating : 5.0;
+      if (rating < minRating) return false;
 
       // Verified Filter
       if (onlyVerified && !p.isVerified) return false;
@@ -158,7 +170,9 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
     }).sort((a, b) => {
       if (a.isFeatured && !b.isFeatured) return -1;
       if (!a.isFeatured && b.isFeatured) return 1;
-      return (b?.rating ?? 5.0) - (a?.rating ?? 5.0);
+      const rA = typeof a?.rating === 'number' ? a.rating : 5.0;
+      const rB = typeof b?.rating === 'number' ? b.rating : 5.0;
+      return rB - rA;
     });
   }, [properties, selectedState, selectedCity, searchQuery, selectedPriceRange, maxPrice, selectedType, minRating, onlyVerified, onlyFeatured, propertyPrices]);
 
@@ -208,7 +222,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
 
           {/* Search Box Input Bar */}
           <div className="pt-2">
-            <div className="bg-white dark:bg-slate-900 p-2 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-2">
+            <form onSubmit={(e) => e.preventDefault()} className="bg-white dark:bg-slate-900 p-2 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-2">
               <div className="flex-1 flex items-center gap-2.5 px-3 py-2 w-full">
                 <Search className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <input
@@ -219,7 +233,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
                   className="w-full text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm font-medium bg-transparent outline-none"
                 />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="p-1 text-slate-400 hover:text-slate-600">
+                  <button type="button" onClick={() => setSearchQuery('')} className="p-1 text-slate-400 hover:text-slate-600">
                     <X className="w-4 h-4" />
                   </button>
                 )}
@@ -242,7 +256,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
                   </span>
                 )}
               </button>
-            </div>
+            </form>
           </div>
 
           {/* City Filter Chips */}

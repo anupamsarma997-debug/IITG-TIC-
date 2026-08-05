@@ -40,6 +40,29 @@ export function App() {
     });
   }, []);
 
+  // Handle QR scan / referral link parameters on URL load
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const propertyId = params.get('p') || params.get('propertyId') || params.get('property');
+      const refId = params.get('ref') || params.get('refId');
+
+      if (propertyId) {
+        const found = store.getPropertyById(propertyId);
+        if (found) {
+          setSelectedProperty(found);
+          setCurrentView('property-detail');
+          if (refId) {
+            store.trackVisit(propertyId, refId, 'qr_referral');
+            sessionStorage.setItem('thikana_current_refId', refId);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('URL search parse error:', e);
+    }
+  }, []);
+
   // Update HTML class for dark theme
   useEffect(() => {
     if (isDark) {

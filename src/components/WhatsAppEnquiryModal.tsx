@@ -132,6 +132,10 @@ ${specialRequests ? `📝 *Special Request:* ${specialRequests}\n` : ''}I want t
       formattedMessage: message,
     });
 
+    // Track Lead for QR referral & conversion analytics
+    const activeRefId = sessionStorage.getItem('thikana_current_refId') || property.ownerId || 'direct';
+    store.trackLead(property.id, activeRefId, customerName, activeRefId !== 'direct' ? 'qr_referral' : 'whatsapp');
+
     // Clean owner phone number (remove +, spaces, leading zeros if 10 digits add 91)
     let cleanPhone = property.ownerWhatsApp || property.ownerPhone || '919816012345';
     cleanPhone = cleanPhone.replace(/\D/g, '');

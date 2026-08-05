@@ -137,6 +137,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isUser(userId) || isAdmin();
     }
+
+    // Visits Collection: Public write (recording QR scans & page visits), public read
+    match /visits/{visitId} {
+      allow create, read: if true;
+      allow update, delete: if isSignedIn();
+    }
+
+    // Leads Collection: Public write (recording WhatsApp booking clicks), public read
+    match /leads/{leadId} {
+      allow create, read: if true;
+      allow update, delete: if isSignedIn();
+    }
   }
 }
 

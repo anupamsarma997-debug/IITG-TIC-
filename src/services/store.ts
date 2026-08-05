@@ -1,4 +1,4 @@
-import { Property, RoomType, BannerAd, User, UserRole, BookingEnquiry, SubscriptionTransaction, PropertyType } from '../types';
+import { Property, RoomType, BannerAd, User, UserRole, BookingEnquiry, SubscriptionTransaction, PropertyType, PropertyVisit, PropertyLead } from '../types';
 import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INITIAL_TRANSACTIONS } from '../data/initialData';
 import { db, auth } from '../lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -11,6 +11,8 @@ const STORAGE_KEYS = {
   BANNERS: 'thikana_banners_v1',
   ENQUIRIES: 'thikana_enquiries_v1',
   TRANSACTIONS: 'thikana_transactions_v1',
+  VISITS: 'thikana_visits_v1',
+  LEADS: 'thikana_leads_v1',
   CURRENT_USER_ID: 'thikana_current_user_id_v1',
   THEME: 'thikana_theme_v1',
   MOBILE_FRAME: 'thikana_mobile_frame_v1',
@@ -169,6 +171,8 @@ class DataStore {
   private banners: BannerAd[] = [];
   private enquiries: BookingEnquiry[] = [];
   private transactions: SubscriptionTransaction[] = [];
+  private visits: PropertyVisit[] = [];
+  private leads: PropertyLead[] = [];
   private currentUserId: string = 'customer_1';
   private listeners: Set<() => void> = new Set();
   private isDarkMode: boolean = false;
@@ -211,6 +215,12 @@ class DataStore {
 
       const storedTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
       this.transactions = storedTx ? JSON.parse(storedTx) : INITIAL_TRANSACTIONS;
+
+      const storedVisits = localStorage.getItem(STORAGE_KEYS.VISITS);
+      this.visits = storedVisits ? JSON.parse(storedVisits) : [];
+
+      const storedLeads = localStorage.getItem(STORAGE_KEYS.LEADS);
+      this.leads = storedLeads ? JSON.parse(storedLeads) : [];
 
       const storedUserId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
       this.currentUserId = storedUserId || 'customer_1';
@@ -344,6 +354,46 @@ class DataStore {
         console.warn('Firestore enquiries sync warning:', err);
       });
 
+      // Sync visits collection from Firestore
+      onSnapshot(collection(db, 'visits'), (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteVisits: PropertyVisit[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteVisits.push({ id: docSnap.id, ...docSnap.data() } as PropertyVisit);
+          });
+          if (remoteVisits.length > 0) {
+            const vMap = new Map<string, PropertyVisit>();
+            this.visits.forEach((v) => vMap.set(v.id, v));
+            remoteVisits.forEach((rv) => vMap.set(rv.id, rv));
+            this.visits = Array.from(vMap.values());
+            this.persist();
+            this.notify(false);
+          }
+        }
+      }, (err) => {
+        console.warn('Firestore visits sync warning:', err);
+      });
+
+      // Sync leads collection from Firestore
+      onSnapshot(collection(db, 'leads'), (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteLeads: PropertyLead[] = [];
+          snapshot.forEach((docSnap) => {
+            remoteLeads.push({ id: docSnap.id, ...docSnap.data() } as PropertyLead);
+          });
+          if (remoteLeads.length > 0) {
+            const lMap = new Map<string, PropertyLead>();
+            this.leads.forEach((l) => lMap.set(l.id, l));
+            remoteLeads.forEach((rl) => lMap.set(rl.id, rl));
+            this.leads = Array.from(lMap.values());
+            this.persist();
+            this.notify(false);
+          }
+        }
+      }, (err) => {
+        console.warn('Firestore leads sync warning:', err);
+      });
+
     } catch (err) {
       console.error('Firebase initialization warning:', err);
     }
@@ -357,6 +407,8 @@ class DataStore {
       localStorage.setItem(STORAGE_KEYS.BANNERS, JSON.stringify(this.banners));
       localStorage.setItem(STORAGE_KEYS.ENQUIRIES, JSON.stringify(this.enquiries));
       localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
+      localStorage.setItem(STORAGE_KEYS.VISITS, JSON.stringify(this.visits));
+      localStorage.setItem(STORAGE_KEYS.LEADS, JSON.stringify(this.leads));
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, this.currentUserId);
       localStorage.setItem(STORAGE_KEYS.THEME, this.isDarkMode ? 'dark' : 'light');
       localStorage.setItem(STORAGE_KEYS.MOBILE_FRAME, String(this.isMobileFrame));
@@ -365,9 +417,11 @@ class DataStore {
     }
   }
 
-  public subscribe(listener: () => void) {
+  public subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   private notify(syncLocal = true) {
@@ -1056,6 +1110,94 @@ class DataStore {
 
   public getTotalRevenue(): number {
     return this.transactions.reduce((sum, t) => sum + t.amount, 0);
+  }
+
+  // QR Code & Referral Analytics
+  public generatePropertyQR(propertyId: string, ownerRefId: string) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mythikana.vercel.app';
+    const trackingUrl = `${origin}/?p=${propertyId}&ref=${encodeURIComponent(ownerRefId)}`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(trackingUrl)}`;
+    return { trackingUrl, qrImageUrl };
+  }
+
+  public trackVisit(propertyId: string, refId: string, source: 'qr_referral' | 'direct' | 'search' = 'qr_referral') {
+    if (!propertyId || !refId) return;
+    const newVisit: PropertyVisit = {
+      id: 'visit_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      propertyId,
+      refId,
+      timestamp: new Date().toISOString(),
+      source,
+    };
+    this.visits.unshift(newVisit);
+    this.persist();
+    try {
+      if (db) {
+        setDoc(doc(db, 'visits', newVisit.id), newVisit).catch((err) => console.warn('Firestore visit error:', err));
+      }
+    } catch (err) {
+      console.warn('Firestore visit sync error:', err);
+    }
+    this.notify();
+  }
+
+  public trackLead(propertyId: string, refId: string, customerName?: string, source: 'qr_referral' | 'direct' | 'whatsapp' = 'qr_referral') {
+    if (!propertyId) return;
+    const safeRef = refId || 'direct';
+    const newLead: PropertyLead = {
+      id: 'lead_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      propertyId,
+      refId: safeRef,
+      customerName: customerName || 'Guest Customer',
+      timestamp: new Date().toISOString(),
+      source,
+    };
+    this.leads.unshift(newLead);
+    this.persist();
+    try {
+      if (db) {
+        setDoc(doc(db, 'leads', newLead.id), newLead).catch((err) => console.warn('Firestore lead error:', err));
+      }
+    } catch (err) {
+      console.warn('Firestore lead sync error:', err);
+    }
+
+    // Check reward milestone (5+ leads unlocks featured search boost!)
+    if (safeRef !== 'direct') {
+      const ownerLeadsCount = this.getLeadsForRefId(safeRef).length;
+      if (ownerLeadsCount >= 5) {
+        const prop = this.properties.find((p) => p.id === propertyId);
+        if (prop && !prop.isFeatured) {
+          this.togglePropertyFeatured(propertyId, true);
+        }
+      }
+    }
+
+    this.notify();
+  }
+
+  public getVisitsForProperty(propertyId: string): PropertyVisit[] {
+    return this.visits.filter((v) => v.propertyId === propertyId);
+  }
+
+  public getVisitsForRefId(refId: string): PropertyVisit[] {
+    return this.visits.filter((v) => v.refId === refId);
+  }
+
+  public getLeadsForProperty(propertyId: string): PropertyLead[] {
+    return this.leads.filter((l) => l.propertyId === propertyId);
+  }
+
+  public getLeadsForRefId(refId: string): PropertyLead[] {
+    return this.leads.filter((l) => l.refId === refId);
+  }
+
+  public getAllVisits(): PropertyVisit[] {
+    return this.visits;
+  }
+
+  public getAllLeads(): PropertyLead[] {
+    return this.leads;
   }
 }
 
