@@ -107,73 +107,82 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
     return priceMap;
   }, [properties]);
 
-  // Filter properties logic
+  // Filter properties logic safely
   const filteredProperties = useMemo(() => {
-    return (properties || []).filter((p) => {
-      if (!p || typeof p !== 'object') return false;
-      // Must be active
-      if (p.status !== 'active') return false;
+    try {
+      return (properties || []).filter((p) => {
+        if (!p || typeof p !== 'object') return false;
+        // Must be active
+        if (p.status !== 'active') return false;
 
-      const pState = (p.state || '').toLowerCase();
-      const pCity = (p.city || '').toLowerCase();
-      const pTitle = (p.title || '').toLowerCase();
-      const pAddress = (p.address || '').toLowerCase();
-      const pType = (p.propertyType || '').toLowerCase();
+        const pState = String(p.state || '').toLowerCase();
+        const pCity = String(p.city || '').toLowerCase();
+        const pTitle = String(p.title || '').toLowerCase();
+        const pAddress = String(p.address || '').toLowerCase();
+        const pType = String(p.propertyType || '').toLowerCase();
+        const pDesc = String(p.description || '').toLowerCase();
 
-      // State filter
-      if (selectedState && selectedState !== 'All States' && pState !== selectedState.toLowerCase()) {
-        return false;
-      }
+        // State filter
+        if (selectedState && selectedState !== 'All States' && pState !== selectedState.toLowerCase()) {
+          return false;
+        }
 
-      // City filter
-      if (selectedCity && selectedCity !== 'All Locations' && pCity !== selectedCity.toLowerCase()) {
-        return false;
-      }
+        // City filter
+        if (selectedCity && selectedCity !== 'All Locations' && pCity !== selectedCity.toLowerCase()) {
+          return false;
+        }
 
-      // Search Query (City, Title, Address, State, Type)
-      if (searchQuery && searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchTitle = pTitle.includes(q);
-        const matchCity = pCity.includes(q);
-        const matchAddress = pAddress.includes(q);
-        const matchState = pState.includes(q);
-        const matchType = pType.includes(q);
-        if (!matchTitle && !matchCity && !matchAddress && !matchState && !matchType) return false;
-      }
+        // Search Query (City, Title, Address, State, Type, Description)
+        if (searchQuery && searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const matchTitle = pTitle.includes(q);
+          const matchCity = pCity.includes(q);
+          const matchAddress = pAddress.includes(q);
+          const matchState = pState.includes(q);
+          const matchType = pType.includes(q);
+          const matchDesc = pDesc.includes(q);
+          if (!matchTitle && !matchCity && !matchAddress && !matchState && !matchType && !matchDesc) {
+            return false;
+          }
+        }
 
-      // Price Range Filter Chip
-      const price = propertyPrices[p.id] ?? 1500;
-      if (selectedPriceRange === 'under-1500' && price > 1500) return false;
-      if (selectedPriceRange === '1500-3000' && (price < 1500 || price > 3000)) return false;
-      if (selectedPriceRange === '3000-5000' && (price < 3000 || price > 5000)) return false;
-      if (selectedPriceRange === 'above-5000' && price < 5000) return false;
+        // Price Range Filter Chip
+        const price = (propertyPrices && p.id && typeof propertyPrices[p.id] === 'number') ? propertyPrices[p.id] : 1500;
+        if (selectedPriceRange === 'under-1500' && price > 1500) return false;
+        if (selectedPriceRange === '1500-3000' && (price < 1500 || price > 3000)) return false;
+        if (selectedPriceRange === '3000-5000' && (price < 3000 || price > 5000)) return false;
+        if (selectedPriceRange === 'above-5000' && price < 5000) return false;
 
-      // Custom Slider Max Price Filter
-      if (price > maxPrice) return false;
+        // Custom Slider Max Price Filter
+        if (price > maxPrice) return false;
 
-      // Property Type Filter
-      if (selectedType && selectedType !== 'All' && pType !== selectedType.toLowerCase()) {
-        return false;
-      }
+        // Property Type Filter
+        if (selectedType && selectedType !== 'All' && pType !== selectedType.toLowerCase()) {
+          return false;
+        }
 
-      // Rating Filter
-      const rating = typeof p.rating === 'number' && !isNaN(p.rating) ? p.rating : 5.0;
-      if (rating < minRating) return false;
+        // Rating Filter
+        const rating = typeof p.rating === 'number' && !isNaN(p.rating) ? p.rating : 5.0;
+        if (rating < minRating) return false;
 
-      // Verified Filter
-      if (onlyVerified && !p.isVerified) return false;
+        // Verified Filter
+        if (onlyVerified && !p.isVerified) return false;
 
-      // Featured Filter
-      if (onlyFeatured && !p.isFeatured) return false;
+        // Featured Filter
+        if (onlyFeatured && !p.isFeatured) return false;
 
-      return true;
-    }).sort((a, b) => {
-      if (a.isFeatured && !b.isFeatured) return -1;
-      if (!a.isFeatured && b.isFeatured) return 1;
-      const rA = typeof a?.rating === 'number' ? a.rating : 5.0;
-      const rB = typeof b?.rating === 'number' ? b.rating : 5.0;
-      return rB - rA;
-    });
+        return true;
+      }).sort((a, b) => {
+        if (a?.isFeatured && !b?.isFeatured) return -1;
+        if (!a?.isFeatured && b?.isFeatured) return 1;
+        const rA = typeof a?.rating === 'number' ? a.rating : 5.0;
+        const rB = typeof b?.rating === 'number' ? b.rating : 5.0;
+        return rB - rA;
+      });
+    } catch (err) {
+      console.error('Error during search filtering:', err);
+      return properties || [];
+    }
   }, [properties, selectedState, selectedCity, searchQuery, selectedPriceRange, maxPrice, selectedType, minRating, onlyVerified, onlyFeatured, propertyPrices]);
 
   const activeFiltersCount = (searchQuery ? 1 : 0) + 
@@ -241,6 +250,7 @@ export const CustomerHomeView: React.FC<CustomerHomeViewProps> = ({
 
               {/* Filter Button Toggle */}
               <button
+                type="button"
                 onClick={() => setShowFilters(!showFilters)}
                 className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all w-full sm:w-auto justify-center cursor-pointer shrink-0 ${
                   showFilters || activeFiltersCount > 0

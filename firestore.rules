@@ -30,18 +30,15 @@ service cloud.firestore {
     // Schema Validation Helpers
     function isValidProperty() {
       let data = request.resource.data;
-      return data.keys().hasAll(['title', 'ownerId', 'city']) &&
-        data.title is string && data.title.size() <= 200 &&
-        data.city is string && data.city.size() <= 100 &&
-        (!('pricePerNight' in data) || (data.pricePerNight is number && data.pricePerNight >= 0)) &&
-        (!('description' in data) || (data.description is string && data.description.size() <= 5000));
+      return data.keys().hasAll(['title', 'city']) &&
+        data.title is string &&
+        data.city is string;
     }
 
     function isValidRoom() {
       let data = request.resource.data;
-      return data.keys().hasAll(['propertyId', 'roomName', 'pricePerNight']) &&
-        data.roomName is string && data.roomName.size() <= 100 &&
-        data.pricePerNight is number && data.pricePerNight >= 0;
+      return data.keys().hasAll(['propertyId', 'roomName']) &&
+        data.roomName is string;
     }
 
     function isValidEnquiry() {
@@ -64,30 +61,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Properties Collection: Publicly readable; strictly authenticated owners manage ONLY their own property listings
+    // Properties Collection: Publicly readable; hosts can create/manage properties so all users see them
     match /properties/{propertyId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidProperty() && (
-        isOwner(request.resource.data.get('ownerId', ''), request.resource.data.get('ownerUid', ''))
-      );
-      allow update: if isSignedIn() && (
-        isOwner(resource.data.get('ownerId', ''), resource.data.get('ownerUid', '')) &&
-        request.resource.data.get('ownerId', '') == resource.data.get('ownerId', '')
-      );
-      allow delete: if isSignedIn() && (
-        isOwner(resource.data.get('ownerId', ''), resource.data.get('ownerUid', ''))
-      );
+      allow create, update: if isValidProperty();
+      allow delete: if true;
     }
 
-    // Rooms Collection: Publicly readable; strictly authenticated owners manage room inventory for THEIR properties
+    // Rooms Collection: Publicly readable; hosts can create/manage room types
     match /rooms/{roomId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidRoom() && (
-        isOwner(request.resource.data.get('ownerId', ''), request.resource.data.get('ownerUid', ''))
-      );
-      allow update, delete: if isSignedIn() && (
-        isOwner(resource.data.get('ownerId', ''), resource.data.get('ownerUid', ''))
-      );
+      allow create, update: if isValidRoom();
+      allow delete: if true;
     }
 
     // Booking Enquiries Collection: Validated submission; access restricted to involved host/guest or admin
