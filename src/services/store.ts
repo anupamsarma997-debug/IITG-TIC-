@@ -146,16 +146,21 @@ function sanitizeUserForFirestore(user: User) {
 
 // Sync safe user details to publicly readable public_profiles collection
 function syncPublicProfile(user: User) {
-  setDoc(
-    doc(db, 'public_profiles', user.id),
-    {
-      id: user.id,
-      name: user.name || '',
-      username: user.username || '',
-      role: user.role || 'customer',
-    },
-    { merge: true }
-  ).catch((err) => console.warn('Public profile sync notice:', err));
+  if (!db) return;
+  try {
+    setDoc(
+      doc(db, 'public_profiles', user.id),
+      {
+        id: user.id,
+        name: user.name || '',
+        username: user.username || '',
+        role: user.role || 'customer',
+      },
+      { merge: true }
+    ).catch((err) => console.warn('Public profile sync notice:', err));
+  } catch (err) {
+    console.warn('syncPublicProfile error:', err);
+  }
 }
 
 const normalizeProperty = (p: any): Property => ({
