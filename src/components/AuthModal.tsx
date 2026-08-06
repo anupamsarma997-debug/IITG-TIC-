@@ -134,20 +134,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       let firebaseUid = `user_${Date.now()}`;
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const fbUser = userCredential.user;
-        firebaseUid = fbUser.uid;
+      if (auth) {
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+          const fbUser = userCredential.user;
+          firebaseUid = fbUser.uid;
 
-        // Send Email Verification
-        await sendEmailVerification(fbUser);
-        setSuccessMessage(`🎉 Account created! A verification email has been sent to ${email.trim()}. Please verify your email.`);
-      } catch (fbErr: any) {
-        console.warn('Firebase Auth create user note:', fbErr?.message);
-        if (fbErr.code === 'auth/email-already-in-use') {
-          setErrorMessage('This email is already registered. Please log in or use Forgot Password.');
-          setIsLoading(false);
-          return;
+          // Send Email Verification
+          await sendEmailVerification(fbUser);
+          setSuccessMessage(`🎉 Account created! A verification email has been sent to ${email.trim()}. Please verify your email.`);
+        } catch (fbErr: any) {
+          console.warn('Firebase Auth create user note:', fbErr?.message);
+          if (fbErr.code === 'auth/email-already-in-use') {
+            setErrorMessage('This email is already registered. Please log in or use Forgot Password.');
+            setIsLoading(false);
+            return;
+          }
         }
       }
 
@@ -199,7 +201,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
 
-      if (emailToTry.includes('@')) {
+      if (auth && emailToTry.includes('@')) {
         try {
           await signInWithEmailAndPassword(auth, emailToTry, loginPassword);
         } catch (fbErr) {

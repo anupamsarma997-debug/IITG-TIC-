@@ -1,6 +1,6 @@
 import { Property, RoomType, BannerAd, User, UserRole, BookingEnquiry, SubscriptionTransaction, PropertyType, PropertyVisit, PropertyLead } from '../types';
 import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INITIAL_TRANSACTIONS } from '../data/initialData';
-import { db, auth } from '../lib/firebase';
+import { db, auth, isFirebaseConfigured } from '../lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
@@ -243,6 +243,9 @@ class DataStore {
   }
 
   private initFirebaseListeners() {
+    if (!isFirebaseConfigured || !db) {
+      return;
+    }
     try {
       // Sync Firebase Auth state with DataStore currentUserId
       if (auth) {
@@ -460,9 +463,11 @@ class DataStore {
       if (googleData.photoURL) found.avatar = googleData.photoURL;
       if (googleData.displayName && (!found.name || found.name === 'Host User')) found.name = googleData.displayName;
       this.currentUserId = found.id;
-      setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) =>
-        console.warn('Firestore sync user error:', err)
-      );
+      if (db) {
+        setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) =>
+          console.warn('Firestore sync user error:', err)
+        );
+      }
       syncPublicProfile(found);
       this.notify();
       return found;
@@ -499,9 +504,11 @@ class DataStore {
 
     this.users.push(newUser);
     this.currentUserId = newUser.id;
-    setDoc(doc(db, 'users', newUser.id), sanitizeUserForFirestore(newUser)).catch((err) =>
-      console.warn('Firestore register Google User error:', err)
-    );
+    if (db) {
+      setDoc(doc(db, 'users', newUser.id), sanitizeUserForFirestore(newUser)).catch((err) =>
+        console.warn('Firestore register Google User error:', err)
+      );
+    }
     syncPublicProfile(newUser);
     this.notify();
     return newUser;
@@ -556,7 +563,9 @@ class DataStore {
 
     this.users.push(newUser);
     this.currentUserId = newUser.id;
-    setDoc(doc(db, 'users', newUser.id), sanitizeUserForFirestore(newUser)).catch((err) => console.warn('Firestore registerUser error:', err));
+    if (db) {
+      setDoc(doc(db, 'users', newUser.id), sanitizeUserForFirestore(newUser)).catch((err) => console.warn('Firestore registerUser error:', err));
+    }
     syncPublicProfile(newUser);
     this.notify();
     return newUser;
@@ -664,7 +673,9 @@ class DataStore {
     if (found.email) this.failedLoginAttempts.delete(found.email.toLowerCase());
 
     this.currentUserId = found.id;
-    setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
+    if (db) {
+      setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
+    }
     syncPublicProfile(found);
     this.notify();
     return { success: true, user: found, message: `Password reset successfully for @${found.username || found.name}! You are now logged in.` };
@@ -693,7 +704,9 @@ class DataStore {
     if (found.email) this.failedLoginAttempts.delete(found.email.toLowerCase());
 
     this.currentUserId = found.id;
-    setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
+    if (db) {
+      setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) => console.warn('Firestore resetPassword error:', err));
+    }
     syncPublicProfile(found);
     this.notify();
     return { success: true, user: found, message: `Password reset successfully for @${found.username || found.name}! You are now logged in.` };
@@ -881,7 +894,9 @@ class DataStore {
     const prop = this.getPropertyById(id);
     if (prop) {
       prop.status = prop.status === 'active' ? 'blocked' : 'active';
-      setDoc(doc(db, 'properties', id), { status: prop.status }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyStatus error:', err));
+      if (db) {
+        setDoc(doc(db, 'properties', id), { status: prop.status }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyStatus error:', err));
+      }
       this.notify();
     }
   }
@@ -890,7 +905,9 @@ class DataStore {
     const prop = this.getPropertyById(id);
     if (prop) {
       prop.isVerified = verified !== undefined ? verified : !prop.isVerified;
-      setDoc(doc(db, 'properties', id), { isVerified: prop.isVerified }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyVerified error:', err));
+      if (db) {
+        setDoc(doc(db, 'properties', id), { isVerified: prop.isVerified }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyVerified error:', err));
+      }
       if (prop.isVerified) {
         this.addTransaction({
           ownerId: prop.ownerId,
@@ -911,7 +928,9 @@ class DataStore {
     const prop = this.getPropertyById(id);
     if (prop) {
       prop.isFeatured = featured !== undefined ? featured : !prop.isFeatured;
-      setDoc(doc(db, 'properties', id), { isFeatured: prop.isFeatured }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyFeatured error:', err));
+      if (db) {
+        setDoc(doc(db, 'properties', id), { isFeatured: prop.isFeatured }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyFeatured error:', err));
+      }
       if (prop.isFeatured) {
         this.addTransaction({
           ownerId: prop.ownerId,
@@ -948,8 +967,10 @@ class DataStore {
     const deletedRooms = this.rooms.filter((r) => r.propertyId === id);
     this.rooms = this.rooms.filter((r) => r.propertyId !== id);
     
-    deleteDoc(doc(db, 'properties', id)).catch((err) => console.warn('Firestore deleteProperty error:', err));
-    deletedRooms.forEach((r) => deleteDoc(doc(db, 'rooms', r.id)).catch(() => {}));
+    if (db) {
+      deleteDoc(doc(db, 'properties', id)).catch((err) => console.warn('Firestore deleteProperty error:', err));
+      deletedRooms.forEach((r) => deleteDoc(doc(db, 'rooms', r.id)).catch(() => {}));
+    }
     
     this.notify();
     return { success: true, message: 'Property deleted successfully.' };
@@ -970,11 +991,13 @@ class DataStore {
     prop.subscriptionExpiryDate = newExpiry.toISOString();
     prop.status = 'active';
 
-    setDoc(doc(db, 'properties', propertyId), {
-      subscriptionExpiresAt: prop.subscriptionExpiresAt,
-      subscriptionExpiryDate: prop.subscriptionExpiryDate,
-      status: prop.status
-    }, { merge: true }).catch((err) => console.warn('Firestore renew error:', err));
+    if (db) {
+      setDoc(doc(db, 'properties', propertyId), {
+        subscriptionExpiresAt: prop.subscriptionExpiresAt,
+        subscriptionExpiryDate: prop.subscriptionExpiryDate,
+        status: prop.status
+      }, { merge: true }).catch((err) => console.warn('Firestore renew error:', err));
+    }
 
     this.addTransaction({
       ownerId: prop.ownerId,
@@ -1008,7 +1031,9 @@ class DataStore {
       id: 'room_' + Date.now(),
     };
     this.rooms.push(newRoom);
-    setDoc(doc(db, 'rooms', newRoom.id), newRoom).catch((err) => console.warn('Firestore addRoom error:', err));
+    if (db) {
+      setDoc(doc(db, 'rooms', newRoom.id), newRoom).catch((err) => console.warn('Firestore addRoom error:', err));
+    }
     this.notify();
     return newRoom;
   }
@@ -1027,7 +1052,9 @@ class DataStore {
         return;
       }
       this.rooms[idx] = { ...this.rooms[idx], ...updates };
-      setDoc(doc(db, 'rooms', id), this.rooms[idx], { merge: true }).catch((err) => console.warn('Firestore updateRoom error:', err));
+      if (db) {
+        setDoc(doc(db, 'rooms', id), this.rooms[idx], { merge: true }).catch((err) => console.warn('Firestore updateRoom error:', err));
+      }
       this.notify();
     }
   }
@@ -1041,7 +1068,9 @@ class DataStore {
         return;
       }
       this.rooms = this.rooms.filter((r) => r.id !== id);
-      deleteDoc(doc(db, 'rooms', id)).catch((err) => console.warn('Firestore deleteRoom error:', err));
+      if (db) {
+        deleteDoc(doc(db, 'rooms', id)).catch((err) => console.warn('Firestore deleteRoom error:', err));
+      }
       this.notify();
     }
   }
@@ -1060,7 +1089,9 @@ class DataStore {
       createdAt: nowIso,
     };
     this.enquiries.unshift(newEnquiry);
-    setDoc(doc(db, 'enquiries', newEnquiry.id), newEnquiry).catch((err) => console.warn('Firestore addEnquiry error:', err));
+    if (db) {
+      setDoc(doc(db, 'enquiries', newEnquiry.id), newEnquiry).catch((err) => console.warn('Firestore addEnquiry error:', err));
+    }
     this.notify();
     return newEnquiry;
   }

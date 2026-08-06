@@ -17,46 +17,39 @@ try {
 const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey;
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId;
 
+// Check if valid Firebase credentials are provided
+export const isFirebaseConfigured = Boolean(
+  apiKey &&
+  projectId &&
+  apiKey !== 'AIzaSyC4NBXm7XoJKGvh5JY4OSHK7NYco2ntJsM' &&
+  projectId !== 'peak-ego-v224x'
+);
+
 const firebaseConfig = {
-  apiKey: apiKey || 'AIzaSyC4NBXm7XoJKGvh5JY4OSHK7NYco2ntJsM',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain || 'peak-ego-v224x.firebaseapp.com',
-  projectId: projectId || 'peak-ego-v224x',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket || 'peak-ego-v224x.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId || '514524067934',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId || '1:514524067934:web:82e09fc2948bd107d89ccf',
+  apiKey: apiKey || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain || '',
+  projectId: projectId || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId || '',
 };
 
-let app: any;
-try {
-  app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-} catch (e) {
-  console.warn('Firebase initializeApp warning:', e);
-  app = getApps().length ? getApp() : initializeApp({
-    apiKey: firebaseConfig.apiKey,
-    projectId: firebaseConfig.projectId,
-  }, 'fallback-app');
-}
+let app: any = null;
+let db: any = null;
+let auth: any = null;
 
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
-
-export let db: any;
-try {
-  db = databaseId && databaseId !== '(default)' ? initializeFirestore(app, {}, databaseId) : getFirestore(app);
-} catch (e) {
+if (isFirebaseConfigured) {
   try {
-    db = getFirestore(app);
-  } catch (err) {
-    console.warn('Firestore initialization warning:', err);
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
+    db = databaseId && databaseId !== '(default)' ? initializeFirestore(app, {}, databaseId) : getFirestore(app);
+    auth = getAuth(app);
+  } catch (e) {
+    console.warn('Firebase initialization warning:', e);
   }
 }
 
-export let auth: any;
-try {
-  auth = getAuth(app);
-} catch (e) {
-  console.warn('Auth initialization warning:', e);
-}
-
+export { app, db, auth };
 export const googleProvider = new GoogleAuthProvider();
 export default app;
 
