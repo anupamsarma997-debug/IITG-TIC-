@@ -471,7 +471,9 @@ class DataStore {
   public logout(): void {
     this.currentUserId = '';
     localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
-    signOut(auth).catch((err) => console.warn('Firebase signOut notice:', err));
+    if (auth) {
+      signOut(auth).catch((err) => console.warn('Firebase signOut notice:', err));
+    }
     this.notify();
   }
 
@@ -1082,7 +1084,7 @@ class DataStore {
 
   public addRoom(room: Omit<RoomType, 'id'>): RoomType {
     const prop = this.getPropertyById(room.propertyId);
-    const firebaseUid = auth.currentUser?.uid;
+    const firebaseUid = auth?.currentUser?.uid;
     const ownerId = room.ownerId || prop?.ownerId || (firebaseUid ? `google_${firebaseUid}` : 'owner-demo');
     const ownerUid = room.ownerUid || prop?.ownerUid || firebaseUid || undefined;
 
