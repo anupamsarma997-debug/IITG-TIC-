@@ -457,6 +457,8 @@ class DataStore {
     if (found) {
       if (!found.googleEmail) found.googleEmail = googleData.email;
       if (!found.googleUid && googleData.uid) found.googleUid = googleData.uid;
+      if (googleData.photoURL) found.avatar = googleData.photoURL;
+      if (googleData.displayName && (!found.name || found.name === 'Host User')) found.name = googleData.displayName;
       this.currentUserId = found.id;
       setDoc(doc(db, 'users', found.id), sanitizeUserForFirestore(found), { merge: true }).catch((err) =>
         console.warn('Firestore sync user error:', err)
@@ -486,6 +488,7 @@ class DataStore {
       email: googleData.email,
       googleEmail: googleData.email,
       googleUid: googleData.uid,
+      avatar: googleData.photoURL || undefined,
       passwordHash: hashPassword('google_auth_user'),
       phone: '',
       whatsapp: '',
@@ -769,7 +772,14 @@ class DataStore {
   }
 
   public getPropertiesByOwner(ownerId: string): Property[] {
-    return this.properties.filter((p) => p.ownerId === ownerId);
+    const user = this.users.find((u) => u.id === ownerId);
+    return this.properties.filter((p) => {
+      if (p.ownerId === ownerId) return true;
+      if (p.ownerUid && (p.ownerUid === ownerId || p.ownerUid === user?.googleUid)) return true;
+      if (p.ownerEmail && user?.email && p.ownerEmail.toLowerCase() === user.email.toLowerCase()) return true;
+      if (p.ownerEmail && user?.googleEmail && p.ownerEmail.toLowerCase() === user.googleEmail.toLowerCase()) return true;
+      return false;
+    });
   }
 
   public addProperty(

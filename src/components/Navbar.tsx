@@ -223,9 +223,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                   <button
                     onClick={onOpenAuth}
-                    className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs hover:ring-2 hover:ring-emerald-500 transition-all"
+                    className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs hover:ring-2 hover:ring-emerald-500 transition-all overflow-hidden"
                   >
-                    {user.name.charAt(0).toUpperCase()}
+                    {user.avatar ? (
+                      <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      user.name.charAt(0).toUpperCase()
+                    )}
                   </button>
                 </div>
               ) : (

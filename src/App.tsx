@@ -93,6 +93,19 @@ export function App() {
   }, [isDark]);
 
   const [autoOpenAddProperty, setAutoOpenAddProperty] = useState<boolean>(false);
+  const [pendingAddProperty, setPendingAddProperty] = useState<boolean>(false);
+
+  const handleOpenAddProperty = () => {
+    const user = store.getCurrentUser();
+    if (!user) {
+      setPendingAddProperty(true);
+      setIsAuthOpen(true);
+    } else {
+      setCurrentRole('owner');
+      setCurrentView('home');
+      setAutoOpenAddProperty(true);
+    }
+  };
 
   const handleSelectProperty = (prop: Property) => {
     setSelectedProperty(prop);
@@ -128,11 +141,7 @@ export function App() {
           }}
           onOpenAuth={() => setIsAuthOpen(true)}
           onOpenAI={() => setIsAIOpen(true)}
-          onOpenAddProperty={() => {
-            setCurrentRole('owner');
-            setCurrentView('home');
-            setAutoOpenAddProperty(true);
-          }}
+          onOpenAddProperty={handleOpenAddProperty}
           onSelectCity={setSelectedCity}
           selectedCity={selectedCity}
         />
@@ -176,11 +185,7 @@ export function App() {
             setCurrentRole(role);
             setCurrentView('home');
           }}
-          onOpenAddProperty={() => {
-            setCurrentRole('owner');
-            setCurrentView('home');
-            setAutoOpenAddProperty(true);
-          }}
+          onOpenAddProperty={handleOpenAddProperty}
         />
 
       </div>
@@ -209,8 +214,19 @@ export function App() {
       {/* Authentication & Registration Modal */}
       <AuthModal
         isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onSuccessRole={(role) => setCurrentRole(role)}
+        onClose={() => {
+          setIsAuthOpen(false);
+          setPendingAddProperty(false);
+        }}
+        onSuccessRole={(role) => {
+          setIsAuthOpen(false);
+          setCurrentRole('owner');
+          setCurrentView('home');
+          if (pendingAddProperty) {
+            setPendingAddProperty(false);
+            setAutoOpenAddProperty(true);
+          }
+        }}
       />
 
     </div>
