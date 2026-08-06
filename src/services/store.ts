@@ -702,12 +702,21 @@ class DataStore {
     if (user && user.role === 'admin') return true;
     const prop = this.properties.find((p) => p.id === propertyId);
     if (!prop) return false;
-    const firebaseUid = auth.currentUser?.uid;
-    return (
+    const firebaseUid = auth?.currentUser?.uid;
+    const firebaseEmail = auth?.currentUser?.email;
+
+    const matchesUid =
       prop.ownerId === userId ||
       prop.ownerUid === userId ||
-      (!!firebaseUid && (prop.ownerUid === firebaseUid || prop.ownerId === firebaseUid || prop.ownerId === `google_${firebaseUid}`))
-    );
+      (!!firebaseUid && (prop.ownerUid === firebaseUid || prop.ownerId === firebaseUid || prop.ownerId === `google_${firebaseUid}`)) ||
+      (!!user?.googleUid && (prop.ownerUid === user.googleUid || prop.ownerId === user.googleUid || prop.ownerId === `google_${user.googleUid}`));
+
+    const matchesEmail =
+      (!!firebaseEmail && prop.ownerEmail?.toLowerCase() === firebaseEmail.toLowerCase()) ||
+      (!!user?.googleEmail && prop.ownerEmail?.toLowerCase() === user.googleEmail.toLowerCase()) ||
+      (!!user?.email && prop.ownerEmail?.toLowerCase() === user.email.toLowerCase());
+
+    return matchesUid || matchesEmail;
   }
 
   public updateUserStatus(userId: string, status: User['status']) {
@@ -774,14 +783,17 @@ class DataStore {
     const price = planType === 'standard_1500' ? 1500 : 1000;
 
     const firebaseUid = auth.currentUser?.uid;
+    const firebaseEmail = auth.currentUser?.email;
     const currentUser = this.getCurrentUser();
     const ownerUid = firebaseUid || currentUser?.googleUid || prop.ownerUid || currentUser?.id;
+    const ownerEmail = firebaseEmail || currentUser?.googleEmail || prop.ownerEmail || currentUser?.email;
     const ownerId = firebaseUid || currentUser?.id || prop.ownerId;
 
     const newProp: Property = {
       ...prop,
       ownerId,
       ownerUid,
+      ownerEmail,
       id: 'prop_' + Date.now(),
       rating: 5.0,
       reviewsCount: 1,
@@ -837,10 +849,11 @@ class DataStore {
       };
     }
 
-    // Strip ownerId and ownerUid to enforce ownership immutability
+    // Strip ownerId, ownerUid, and ownerEmail to enforce ownership immutability
     const safeUpdates = { ...updates };
     delete safeUpdates.ownerId;
     delete safeUpdates.ownerUid;
+    delete safeUpdates.ownerEmail;
 
     this.properties[idx] = { ...this.properties[idx], ...safeUpdates };
     try {

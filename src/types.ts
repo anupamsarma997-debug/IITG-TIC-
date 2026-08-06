@@ -25,6 +25,7 @@ export interface RoomType {
   propertyId: string;
   ownerId?: string;
   ownerUid?: string;
+  ownerEmail?: string;
   roomName: string;
   pricePerNight: number;
   discountPrice?: number;
@@ -40,6 +41,7 @@ export interface Property {
   id: string;
   ownerId: string;
   ownerUid?: string;
+  ownerEmail?: string;
   ownerName: string;
   ownerPhone: string;
   ownerWhatsApp: string;

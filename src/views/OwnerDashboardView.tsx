@@ -631,6 +631,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                 const today = new Date();
                 const daysLeft = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
+                const isOwner = currentUser && store.isOwnerOfProperty(currentUser.id, property.id);
+
                 return (
                   <div
                     key={property.id}
@@ -665,28 +667,32 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => verifyOwnerAndExecute(property, () => handleOpenEdit(property))}
-                            className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl"
-                            title="Edit Property (Requires Owner Login)"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              verifyOwnerAndExecute(property, () => {
+                        {isOwner ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenEdit(property)}
+                              className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl"
+                              title="Edit Property (Owner Only)"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
                                 if (confirm('Delete this property listing?')) {
                                   store.deleteProperty(property.id);
                                 }
-                              });
-                            }}
-                            className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl"
-                            title="Delete Property"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                              }}
+                              className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl"
+                              title="Delete Property (Owner Only)"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-700/60 text-slate-500 px-2.5 py-1 rounded-lg">
+                            Owner: {property.ownerName}
+                          </span>
+                        )}
                       </div>
 
                       <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
@@ -704,12 +710,14 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                           <span>Subscription: {daysLeft} days remaining</span>
                         </span>
 
-                        <button
-                          onClick={() => verifyOwnerAndExecute(property, () => handleBuyAddon(property.id, 'renew'))}
-                          className="bg-slate-900 text-white text-[10px] px-2.5 py-1 rounded-lg hover:bg-slate-800 cursor-pointer"
-                        >
-                          Renew ₹1000
-                        </button>
+                        {isOwner && (
+                          <button
+                            onClick={() => handleBuyAddon(property.id, 'renew')}
+                            className="bg-slate-900 text-white text-[10px] px-2.5 py-1 rounded-lg hover:bg-slate-800 cursor-pointer"
+                          >
+                            Renew ₹1000
+                          </button>
+                        )}
                       </div>
 
                       {/* Room Types & Pricing Summary */}
@@ -718,13 +726,15 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                           <span className="font-extrabold text-slate-800 dark:text-slate-200">
                             Room Types & Pricing ({rooms.length})
                           </span>
-                          <button
-                            onClick={() => verifyOwnerAndExecute(property, () => handleOpenAddRoom(property.id))}
-                            className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-extrabold px-2.5 py-1 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1 text-[11px] cursor-pointer"
-                          >
-                            <PlusCircle className="w-3.5 h-3.5" />
-                            <span>+ Add Room & Price</span>
-                          </button>
+                          {isOwner && (
+                            <button
+                              onClick={() => handleOpenAddRoom(property.id)}
+                              className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-extrabold px-2.5 py-1 rounded-lg border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1 text-[11px] cursor-pointer"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                              <span>+ Add Room & Price</span>
+                            </button>
+                          )}
                         </div>
 
                         {rooms.map((r) => (
@@ -749,27 +759,27 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                                 <span className="text-[10px] text-slate-500">/night</span>
                               </div>
 
-                              <div className="flex items-center gap-2 justify-end mt-1">
-                                <button
-                                  onClick={() => verifyOwnerAndExecute(property, () => handleOpenEditRoom(property.id, r))}
-                                  className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
-                                >
-                                  <Edit3 className="w-3 h-3" /> Edit Price
-                                </button>
-                                <span className="text-slate-300">•</span>
-                                <button
-                                  onClick={() => {
-                                    verifyOwnerAndExecute(property, () => {
+                              {isOwner && (
+                                <div className="flex items-center gap-2 justify-end mt-1">
+                                  <button
+                                    onClick={() => handleOpenEditRoom(property.id, r)}
+                                    className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                                  >
+                                    <Edit3 className="w-3 h-3" /> Edit Price
+                                  </button>
+                                  <span className="text-slate-300">•</span>
+                                  <button
+                                    onClick={() => {
                                       if (confirm(`Delete room "${r.roomName}"?`)) {
                                         store.deleteRoomType(r.id);
                                       }
-                                    });
-                                  }}
-                                  className="text-[10px] text-rose-500 hover:underline cursor-pointer"
-                                >
-                                  Delete
-                                </button>
-                              </div>
+                                    }}
+                                    className="text-[10px] text-rose-500 hover:underline cursor-pointer"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}
