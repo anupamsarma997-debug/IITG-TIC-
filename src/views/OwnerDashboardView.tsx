@@ -348,17 +348,9 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       .filter((s) => s.length > 0);
 
     const user = store.getCurrentUser();
-    const fbUser = auth?.currentUser;
-    const isGoogleAuth = Boolean(fbUser || user?.googleUid || user?.isGoogleUser);
 
     if (!user) {
-      setFormError('⚠️ Google Login required! Please sign in with Google to list a property.');
-      setAuthModalOpen(true);
-      return;
-    }
-
-    if (!isGoogleAuth) {
-      setFormError('⚠️ Google Login required! You must sign in with Google to add a property listing.');
+      setFormError('⚠️ Please sign in to list a property.');
       setAuthModalOpen(true);
       return;
     }

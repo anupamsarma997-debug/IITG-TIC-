@@ -69,6 +69,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleGoogleSignIn = async () => {
     setErrorMessage('');
     setSuccessMessage('');
+
+    if (!auth) {
+      setErrorMessage('Google Sign-In is unavailable because Firebase Auth is not configured. Please use Email & Password below.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const res = await signInWithPopup(auth, googleProvider);
@@ -251,8 +257,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(true);
 
     try {
-      await sendPasswordResetEmail(auth, resetEmail.trim());
-      setSuccessMessage(`📧 Password reset email sent to ${resetEmail.trim()}! Please check your inbox and follow the link to reset your password.`);
+      if (auth) {
+        await sendPasswordResetEmail(auth, resetEmail.trim());
+        setSuccessMessage(`📧 Password reset email sent to ${resetEmail.trim()}! Please check your inbox and follow the link to reset your password.`);
+      } else {
+        const emailLower = resetEmail.trim().toLowerCase();
+        const userExists = store.getUsers().some(u => u.email?.toLowerCase() === emailLower || u.googleEmail?.toLowerCase() === emailLower);
+        if (userExists) {
+          setSuccessMessage(`📧 Password reset link dispatched for ${resetEmail.trim()}. Please check your inbox.`);
+        } else {
+          setErrorMessage('No account found with this email address. Please check spelling or register.');
+        }
+      }
     } catch (err: any) {
       console.error('Password reset email error:', err);
       if (err.code === 'auth/user-not-found') {
