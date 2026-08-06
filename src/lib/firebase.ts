@@ -59,8 +59,54 @@ if (isFirebaseConfigured) {
   firebaseConfigError = 'Firebase configuration is missing or incomplete.';
 }
 
+export interface FirebaseDiagnostic {
+  isConfigured: boolean;
+  isGoogleAuthReady: boolean;
+  missingVars: string[];
+  loadedVars: Record<string, boolean>;
+  authInitialized: boolean;
+  errorMessage: string | null;
+}
+
+export const checkFirebaseDiagnostics = (): FirebaseDiagnostic => {
+  const loadedVars: Record<string, boolean> = {
+    VITE_FIREBASE_API_KEY: Boolean(firebaseConfig.apiKey),
+    VITE_FIREBASE_AUTH_DOMAIN: Boolean(firebaseConfig.authDomain),
+    VITE_FIREBASE_PROJECT_ID: Boolean(firebaseConfig.projectId),
+    VITE_FIREBASE_STORAGE_BUCKET: Boolean(firebaseConfig.storageBucket),
+    VITE_FIREBASE_MESSAGING_SENDER_ID: Boolean(firebaseConfig.messagingSenderId),
+    VITE_FIREBASE_APP_ID: Boolean(firebaseConfig.appId),
+  };
+
+  const missingVars = Object.keys(loadedVars).filter((key) => !loadedVars[key]);
+  const isConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+  const authInitialized = Boolean(auth);
+  const isGoogleAuthReady = Boolean(auth && googleProvider && firebaseConfig.apiKey && firebaseConfig.authDomain);
+
+  let errorMessage: string | null = null;
+  if (missingVars.length > 0) {
+    errorMessage = `Missing runtime env variables: ${missingVars.join(', ')}`;
+  } else if (!authInitialized) {
+    errorMessage = firebaseConfigError || 'Firebase Auth service is not initialized.';
+  } else if (!isGoogleAuthReady) {
+    errorMessage = 'Google Auth provider is missing necessary credentials or Auth Domain configuration.';
+  }
+
+  return {
+    isConfigured,
+    isGoogleAuthReady,
+    missingVars,
+    loadedVars,
+    authInitialized,
+    errorMessage,
+  };
+};
+
 export { app, db, auth, storage, firebaseConfigError };
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
 export default app;
 
 
