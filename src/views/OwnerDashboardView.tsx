@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Property, RoomType, User } from '../types';
 import { store } from '../services/store';
 import { auth } from '../lib/firebase';
+import { uploadPropertyPhoto } from '../services/uploadPropertyImage';
 import { AuthModal } from '../components/AuthModal';
 import { QRPerformanceCard } from '../components/QRPerformanceCard';
 import { 
@@ -96,8 +97,12 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     return text.trim() ? text.trim().split(/\s+/).length : 0;
   };
 
-  // Handle local image file upload (converts images to Data URLs & appends to photoUrlsInput)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload progress state
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const [uploadProgressMap, setUploadProgressMap] = useState<{ [filename: string]: number }>({});
+
+  // Handle local image file upload directly to Firebase Storage
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setFormError('');
@@ -108,19 +113,31 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       return;
     }
 
+    const fbUser = auth?.currentUser;
+    const user = store.getCurrentUser();
+
+    if (!fbUser && !user?.googleUid) {
+      setFormError('⚠️ Authentication required: Please sign in with Google to upload property photos.');
+      setAuthTargetTitle('Upload Property Photos');
+      setAuthModalOpen(true);
+      return;
+    }
+
+    const ownerUid = fbUser?.uid || user?.googleUid || user?.id || 'owner_anon';
+    const propertyId = editingPropertyId || 'prop_' + Date.now();
+
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
-    let addedCount = 0;
+    const filesToUpload: File[] = [];
 
     for (let i = 0; i < files.length; i++) {
-      if (currentPhotos.length + addedCount >= 20) {
-        setFormError('⚠️ Maximum 20 photos limit reached. Only the first 20 images were added.');
+      if (currentPhotos.length + filesToUpload.length >= 20) {
+        setFormError('⚠️ Maximum 20 photos limit reached. Only the first 20 images will be uploaded.');
         break;
       }
 
       const file = files[i];
-
       if (!allowedTypes.includes(file.type.toLowerCase()) && !file.type.startsWith('image/')) {
-        setFormError(`⚠️ Security Alert: "${file.name}" is not a supported image file. Only JPG, PNG, and WebP images are permitted.`);
+        setFormError(`⚠️ Security Alert: "${file.name}" is not a supported image file. Only JPG, PNG, WEBP, and GIF images are permitted.`);
         return;
       }
 
@@ -129,19 +146,46 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         return;
       }
 
-      addedCount++;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        if (result) {
-          setPhotoUrlsInput((prev) => {
-            const list = prev.split('\n').map((s) => s.trim()).filter(Boolean);
-            if (list.length >= 20) return prev;
-            return prev ? `${prev}\n${result}` : result;
-          });
-        }
-      };
-      reader.readAsDataURL(file);
+      filesToUpload.push(file);
+    }
+
+    if (filesToUpload.length === 0) return;
+
+    setIsUploadingPhotos(true);
+    const newUrls: string[] = [];
+
+    try {
+      for (const file of filesToUpload) {
+        setUploadProgressMap((prev) => ({ ...prev, [file.name]: 5 }));
+        const downloadUrl = await uploadPropertyPhoto(
+          file,
+          ownerUid,
+          propertyId,
+          (percent) => {
+            setUploadProgressMap((prev) => ({ ...prev, [file.name]: percent }));
+          }
+        );
+        newUrls.push(downloadUrl);
+        setUploadProgressMap((prev) => {
+          const next = { ...prev };
+          delete next[file.name];
+          return next;
+        });
+      }
+
+      if (newUrls.length > 0) {
+        setPhotoUrlsInput((prev) => {
+          const list = prev.split('\n').map((s) => s.trim()).filter(Boolean);
+          const combined = [...list, ...newUrls].slice(0, 20);
+          return combined.join('\n');
+        });
+      }
+    } catch (err: any) {
+      console.error('Photo upload error:', err);
+      setFormError(`⚠️ Photo upload failed: ${err?.message || err}`);
+    } finally {
+      setIsUploadingPhotos(false);
+      e.target.value = '';
     }
   };
 
@@ -192,7 +236,9 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   // Open Form to Add New Property
   const handleOpenAdd = () => {
     const user = store.getCurrentUser();
-    if (!user) {
+    const fbUser = auth?.currentUser;
+
+    if (!user && !fbUser) {
       setAuthRequiredOwnerId(undefined);
       setAuthTargetTitle("Listing New Property");
       setPendingAction(() => () => handleOpenAdd());
@@ -216,8 +262,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     setCheckOutTime('11:00 AM');
     setPhotoUrlsInput('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80\nhttps://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80');
     setVideoUrl('');
-    setOwnerPhoneInput(user.phone || '+91 9876543210');
-    setOwnerWhatsAppInput(user.whatsapp || '919876543210');
+    setOwnerPhoneInput(user?.phone || '+91 9876543210');
+    setOwnerWhatsAppInput(user?.whatsapp || '919876543210');
 
     // Pre-fill initial room setup
     setRoomName('Traditional Bamboo Stilt (Chang Ghar) Suite');
@@ -235,6 +281,19 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   // Open Form to Edit Existing Property
   const handleOpenEdit = (prop: Property) => {
     setFormError('');
+    const user = store.getCurrentUser();
+    const fbUser = auth?.currentUser;
+
+    const isOwner =
+      user?.role === 'admin' ||
+      (!!fbUser && prop.ownerUid === fbUser.uid) ||
+      store.isOwnerOfProperty(user?.id, prop.id);
+
+    if (!isOwner) {
+      alert('Permission Denied: Only the verified owner of this property can edit this listing.');
+      return;
+    }
+
     setEditingPropertyId(prop.id);
     setTitle(prop.title);
     setDescription(prop.description);
@@ -1400,6 +1459,30 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-mono outline-none focus:ring-2 focus:ring-emerald-500"
                 />
 
+                {/* Active Upload Progress Indicators */}
+                {Object.keys(uploadProgressMap).length > 0 && (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 rounded-xl border border-emerald-200 dark:border-emerald-800 space-y-2">
+                    <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                      <span className="animate-spin inline-block w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full" />
+                      Uploading photos to Firebase Storage...
+                    </p>
+                    {Object.entries(uploadProgressMap).map(([fname, progress]) => (
+                      <div key={fname} className="space-y-1">
+                        <div className="flex justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                          <span className="truncate max-w-[200px]">{fname}</span>
+                          <span className="font-bold">{progress}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="bg-emerald-600 h-full transition-all duration-200"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Live Photo Preview Grid */}
                 {photoUrlsInput.split('\n').filter((s) => s.trim().length > 0).length > 0 && (
                   <div className="p-3 bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80">
@@ -1571,9 +1654,14 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md"
+                  disabled={isUploadingPhotos}
+                  className={`font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all ${
+                    isUploadingPhotos
+                      ? 'bg-slate-400 text-white cursor-not-allowed opacity-70'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                  }`}
                 >
-                  Save Property Listing
+                  {isUploadingPhotos ? 'Uploading Photos...' : 'Save Property Listing'}
                 </button>
               </div>
 

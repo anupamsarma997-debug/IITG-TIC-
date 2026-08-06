@@ -3,6 +3,7 @@ import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INIT
 import { db, auth, isFirebaseConfigured, firebaseConfigError } from '../lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { deletePropertyPhoto } from './uploadPropertyImage';
 
 const STORAGE_KEYS = {
   USERS: 'thikana_users_v1',
@@ -838,15 +839,19 @@ class DataStore {
     const firebaseEmail = auth?.currentUser?.email;
     const currentUser = this.getCurrentUser();
 
+    if (!firebaseUid && !currentUser?.googleUid) {
+      throw new Error('Authentication required: You must be signed in with Google / Firebase Auth to list a new property.');
+    }
+
     const now = new Date();
     const expires = new Date();
     expires.setDate(now.getDate() + 30);
 
     const price = planType === 'standard_1500' ? 1500 : 1000;
 
-    const ownerUid = firebaseUid || currentUser?.googleUid || prop.ownerUid || currentUser?.id || 'owner_anon';
+    const ownerUid = firebaseUid || currentUser?.googleUid || currentUser?.id || 'owner_anon';
     const ownerEmail = firebaseEmail || currentUser?.googleEmail || prop.ownerEmail || currentUser?.email || '';
-    const ownerId = currentUser?.id || firebaseUid || prop.ownerId || 'owner_anon';
+    const ownerId = currentUser?.id || firebaseUid || prop.ownerId || ownerUid;
 
     const newProp: Property = {
       ...prop,
@@ -904,8 +909,16 @@ class DataStore {
       return { success: false, status: 404, message: 'Property not found.' };
     }
 
+    const prop = this.properties[idx];
     const currentUser = this.getCurrentUser();
-    if (!currentUser || !this.isOwnerOfProperty(currentUser.id, id)) {
+    const firebaseUid = auth?.currentUser?.uid;
+
+    const isOwner =
+      currentUser?.role === 'admin' ||
+      (!!firebaseUid && prop.ownerUid === firebaseUid) ||
+      this.isOwnerOfProperty(currentUser?.id, id);
+
+    if (!isOwner) {
       console.error('403 Forbidden: Unauthorized property update blocked for id:', id);
       return { 
         success: false, 
@@ -1012,13 +1025,27 @@ class DataStore {
     }
 
     const currentUser = this.getCurrentUser();
-    if (!currentUser || !this.isOwnerOfProperty(currentUser.id, id)) {
+    const firebaseUid = auth?.currentUser?.uid;
+
+    const isOwner =
+      currentUser?.role === 'admin' ||
+      (!!firebaseUid && prop.ownerUid === firebaseUid) ||
+      this.isOwnerOfProperty(currentUser?.id, id);
+
+    if (!isOwner) {
       console.error('403 Forbidden: Unauthorized property deletion blocked for id:', id);
       return { 
         success: false, 
         status: 403, 
         message: '403 Forbidden: Only the property owner can delete this listing.' 
       };
+    }
+
+    // Delete associated property photos from Firebase Storage (best-effort)
+    if (prop.photos && Array.isArray(prop.photos)) {
+      for (const photoUrl of prop.photos) {
+        deletePropertyPhoto(photoUrl).catch(() => {});
+      }
     }
 
     if (db) {

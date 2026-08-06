@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 
 // Safely attempt to load firebase-applet-config.json if present
 let config: Record<string, any> = {};
@@ -32,6 +33,7 @@ const firebaseConfig = {
 let app: any = null;
 let db: any = null;
 let auth: any = null;
+let storage: any = null;
 let firebaseConfigError: string | null = null;
 
 if (isFirebaseConfigured) {
@@ -48,6 +50,7 @@ if (isFirebaseConfigured) {
       db = getFirestore(app);
     }
     auth = getAuth(app);
+    storage = getStorage(app);
   } catch (e: any) {
     firebaseConfigError = e?.message || String(e);
     console.error('Firebase initialization error:', e);
@@ -56,7 +59,7 @@ if (isFirebaseConfigured) {
   firebaseConfigError = 'Firebase configuration is missing or incomplete.';
 }
 
-export { app, db, auth, firebaseConfigError };
+export { app, db, auth, storage, firebaseConfigError };
 export const googleProvider = new GoogleAuthProvider();
 export default app;
 
