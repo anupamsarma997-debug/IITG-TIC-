@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { UserRole, Property, RoomType } from './types';
 import { store } from './services/store';
+import { firebaseConfigError } from './lib/firebase';
+import { AlertTriangle } from 'lucide-react';
 
 // Components
 import { Navbar } from './components/Navbar';
@@ -145,6 +147,26 @@ export function App() {
           onSelectCity={setSelectedCity}
           selectedCity={selectedCity}
         />
+
+        {/* Firebase / Firestore Configuration Error Banner */}
+        {(firebaseConfigError || store.firestoreError) && (
+          <div className="bg-amber-50 dark:bg-amber-950/80 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 px-4 py-3 text-xs sm:text-sm font-medium flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>
+                <strong>System Notice:</strong> {store.firestoreError || firebaseConfigError}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                store.firestoreError = null;
+              }}
+              className="text-xs underline text-amber-700 dark:text-amber-300 hover:text-amber-900 shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Main Content Area */}
         <main className="flex-1">

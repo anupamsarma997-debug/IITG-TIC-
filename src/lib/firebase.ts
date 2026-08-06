@@ -18,12 +18,7 @@ const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey;
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId;
 
 // Check if valid Firebase credentials are provided
-export const isFirebaseConfigured = Boolean(
-  apiKey &&
-  projectId &&
-  apiKey !== 'AIzaSyC4NBXm7XoJKGvh5JY4OSHK7NYco2ntJsM' &&
-  projectId !== 'peak-ego-v224x'
-);
+export const isFirebaseConfigured = Boolean(apiKey && projectId);
 
 const firebaseConfig = {
   apiKey: apiKey || '',
@@ -37,19 +32,31 @@ const firebaseConfig = {
 let app: any = null;
 let db: any = null;
 let auth: any = null;
+let firebaseConfigError: string | null = null;
 
 if (isFirebaseConfigured) {
   try {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
-    db = databaseId && databaseId !== '(default)' ? initializeFirestore(app, {}, databaseId) : getFirestore(app);
+    if (databaseId && databaseId !== '(default)') {
+      try {
+        db = getFirestore(app, databaseId);
+      } catch {
+        db = initializeFirestore(app, {}, databaseId);
+      }
+    } else {
+      db = getFirestore(app);
+    }
     auth = getAuth(app);
-  } catch (e) {
-    console.warn('Firebase initialization warning:', e);
+  } catch (e: any) {
+    firebaseConfigError = e?.message || String(e);
+    console.error('Firebase initialization error:', e);
   }
+} else {
+  firebaseConfigError = 'Firebase configuration is missing or incomplete.';
 }
 
-export { app, db, auth };
+export { app, db, auth, firebaseConfigError };
 export const googleProvider = new GoogleAuthProvider();
 export default app;
 

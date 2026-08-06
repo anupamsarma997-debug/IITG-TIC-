@@ -1,6 +1,6 @@
 import { Property, RoomType, BannerAd, User, UserRole, BookingEnquiry, SubscriptionTransaction, PropertyType, PropertyVisit, PropertyLead } from '../types';
 import { INITIAL_USERS, INITIAL_PROPERTIES, INITIAL_ROOMS, INITIAL_BANNERS, INITIAL_TRANSACTIONS } from '../data/initialData';
-import { db, auth, isFirebaseConfigured } from '../lib/firebase';
+import { db, auth, isFirebaseConfigured, firebaseConfigError } from '../lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
@@ -178,6 +178,7 @@ class DataStore {
   private isDarkMode: boolean = false;
   private isMobileFrame: boolean = false;
   private isFirebaseSynced: boolean = false;
+  public firestoreError: string | null = null;
   private failedLoginAttempts: Map<string, { count: number; lockUntil: number }> = new Map();
 
   constructor() {
@@ -244,10 +245,13 @@ class DataStore {
 
   private initFirebaseListeners() {
     if (!isFirebaseConfigured || !db) {
+      if (firebaseConfigError) {
+        this.firestoreError = firebaseConfigError;
+      }
       return;
     }
     try {
-      // Sync Firebase Auth state with DataStore currentUserId
+      // Sync Firebase Auth state with DataStore currentUserId & user doc
       if (auth) {
         onAuthStateChanged(auth, (fbUser) => {
           if (fbUser) {
@@ -263,12 +267,30 @@ class DataStore {
               this.persist();
               this.notify(false);
             }
+
+            // Listen to authenticated user's profile document in Firestore
+            try {
+              onSnapshot(doc(db, 'users', fbUser.uid), (docSnap) => {
+                if (docSnap.exists()) {
+                  const uData = { id: docSnap.id, ...docSnap.data() } as User;
+                  const idx = this.users.findIndex((u) => u.id === uData.id);
+                  if (idx !== -1) {
+                    this.users[idx] = { ...this.users[idx], ...uData };
+                  } else {
+                    this.users.push(uData);
+                  }
+                  this.persist();
+                  this.notify(false);
+                }
+              }, () => {});
+            } catch {}
           }
         });
       }
 
       // Sync properties collection from Firestore
       onSnapshot(collection(db, 'properties'), (snapshot) => {
+        this.firestoreError = null;
         if (!snapshot.empty) {
           const remoteProps: Property[] = [];
           snapshot.forEach((docSnap) => {
@@ -282,15 +304,17 @@ class DataStore {
             this.persist();
             this.notify(false);
           }
-        } else if (!this.isFirebaseSynced) {
-          // Seed Firestore with initial properties if empty
-          INITIAL_PROPERTIES.forEach((p) => {
-            setDoc(doc(db, 'properties', p.id), p).catch((err) => console.warn('Firestore seed prop error:', err));
-          });
         }
         this.isFirebaseSynced = true;
       }, (err) => {
-        console.warn('Firestore properties sync warning:', err);
+        console.error('Firestore properties sync error:', err);
+        const msg = err?.message || String(err);
+        if (msg.includes('not found') || msg.includes('Database')) {
+          this.firestoreError = `Firestore Database Error: Database not found or not created in project 'peak-ego-v224x'. Details: ${msg}`;
+        } else {
+          this.firestoreError = `Firestore sync error: ${msg}`;
+        }
+        this.notify(false);
       });
 
       // Sync rooms collection from Firestore
@@ -308,16 +332,12 @@ class DataStore {
             this.persist();
             this.notify(false);
           }
-        } else if (!this.isFirebaseSynced) {
-          INITIAL_ROOMS.forEach((r) => {
-            setDoc(doc(db, 'rooms', r.id), r).catch((err) => console.warn('Firestore seed room error:', err));
-          });
         }
       }, (err) => {
-        console.warn('Firestore rooms sync warning:', err);
+        console.error('Firestore rooms sync error:', err);
       });
 
-      // Sync users collection from Firestore
+      // Sync users collection from Firestore (for admins/authorized roles)
       onSnapshot(collection(db, 'users'), (snapshot) => {
         if (!snapshot.empty) {
           const remoteUsers: User[] = [];
@@ -334,7 +354,10 @@ class DataStore {
           }
         }
       }, (err) => {
-        console.warn('Firestore users sync warning:', err);
+        // Handle security rule restriction on collection scan gracefully
+        if (!err?.message?.includes('permission') && !err?.message?.includes('Missing or insufficient permissions')) {
+          console.warn('Firestore users sync note:', err?.message || err);
+        }
       });
 
       // Sync enquiries collection from Firestore
@@ -354,7 +377,9 @@ class DataStore {
           }
         }
       }, (err) => {
-        console.warn('Firestore enquiries sync warning:', err);
+        if (!err?.message?.includes('permission') && !err?.message?.includes('Missing or insufficient permissions')) {
+          console.warn('Firestore enquiries sync note:', err?.message || err);
+        }
       });
 
       // Sync visits collection from Firestore
@@ -397,8 +422,9 @@ class DataStore {
         console.warn('Firestore leads sync warning:', err);
       });
 
-    } catch (err) {
-      console.error('Firebase initialization warning:', err);
+    } catch (err: any) {
+      console.error('Firebase listeners setup error:', err);
+      this.firestoreError = err?.message || String(err);
     }
   }
 
@@ -795,19 +821,30 @@ class DataStore {
     });
   }
 
-  public addProperty(
+  public async addProperty(
     prop: Omit<Property, 'id' | 'createdAt' | 'rating' | 'reviewsCount' | 'isVerified' | 'isFeatured' | 'status' | 'subscriptionPlan' | 'subscriptionPrice' | 'subscriptionExpiresAt' | 'subscriptionExpiryDate'>,
     planType: 'standard_1000' | 'standard_1500' = 'standard_1000'
-  ): Property {
+  ): Promise<Property> {
+    const firebaseUid = auth?.currentUser?.uid;
+    const firebaseEmail = auth?.currentUser?.email;
+    const currentUser = this.getCurrentUser();
+
+    // Check Google Login requirement
+    const isGoogleAuth = Boolean(firebaseUid || currentUser?.googleUid || currentUser?.isGoogleUser);
+    if (!isGoogleAuth) {
+      throw new Error('Google Login required! You must sign in with Google to add a property listing.');
+    }
+
+    if (!db) {
+      throw new Error('Firestore Database is not connected. ' + (firebaseConfigError || 'Please check project configuration.'));
+    }
+
     const now = new Date();
     const expires = new Date();
     expires.setDate(now.getDate() + 30);
 
     const price = planType === 'standard_1500' ? 1500 : 1000;
 
-    const firebaseUid = auth.currentUser?.uid;
-    const firebaseEmail = auth.currentUser?.email;
-    const currentUser = this.getCurrentUser();
     const ownerUid = firebaseUid || currentUser?.googleUid || prop.ownerUid || currentUser?.id;
     const ownerEmail = firebaseEmail || currentUser?.googleEmail || prop.ownerEmail || currentUser?.email;
     const ownerId = firebaseUid || currentUser?.id || prop.ownerId;
@@ -830,15 +867,25 @@ class DataStore {
       createdAt: now.toISOString(),
     };
 
-    this.properties.push(newProp);
-
-    // Write to Firestore
+    // Save strictly to Firestore
     try {
-      if (db) {
-        setDoc(doc(db, 'properties', newProp.id), newProp).catch((err) => console.warn('Firestore addProperty error:', err));
+      await setDoc(doc(db, 'properties', newProp.id), newProp);
+    } catch (err: any) {
+      console.error('Firestore addProperty error:', err);
+      let errorMsg = err?.message || String(err);
+      if (errorMsg.includes('not found') || errorMsg.includes('Database')) {
+        errorMsg = `Firestore Database not found in project 'peak-ego-v224x'. Please ensure Firestore database 'ai-studio-thikana-9c4578c1-2846-48dc-b655-1dd95d3749bb' or default database is created in the Firebase Console. Details: ${errorMsg}`;
       }
-    } catch (err) {
-      console.warn('Firestore addProperty sync error:', err);
+      this.firestoreError = errorMsg;
+      this.notify();
+      throw new Error(errorMsg);
+    }
+
+    const existingIdx = this.properties.findIndex((p) => p.id === newProp.id);
+    if (existingIdx === -1) {
+      this.properties.push(newProp);
+    } else {
+      this.properties[existingIdx] = newProp;
     }
 
     this.addTransaction({
@@ -856,7 +903,7 @@ class DataStore {
     return newProp;
   }
 
-  public updateProperty(id: string, updates: Partial<Property>): { success: boolean; status?: number; message?: string } {
+  public async updateProperty(id: string, updates: Partial<Property>): Promise<{ success: boolean; status?: number; message?: string }> {
     const idx = this.properties.findIndex((p) => p.id === id);
     if (idx === -1) {
       return { success: false, status: 404, message: 'Property not found.' };
@@ -868,7 +915,15 @@ class DataStore {
       return { 
         success: false, 
         status: 403, 
-        message: '403 Forbidden: You do not have permission to modify this property listing.' 
+        message: '403 Forbidden: Only the property owner can edit this listing.' 
+      };
+    }
+
+    if (!db) {
+      return {
+        success: false,
+        status: 500,
+        message: 'Firestore Database is not connected. ' + (firebaseConfigError || '')
       };
     }
 
@@ -878,14 +933,22 @@ class DataStore {
     delete safeUpdates.ownerUid;
     delete safeUpdates.ownerEmail;
 
-    this.properties[idx] = { ...this.properties[idx], ...safeUpdates };
+    const updatedProp = { ...this.properties[idx], ...safeUpdates };
+
     try {
-      if (db) {
-        setDoc(doc(db, 'properties', id), this.properties[idx], { merge: true }).catch((err) => console.warn('Firestore updateProperty error:', err));
+      await setDoc(doc(db, 'properties', id), updatedProp, { merge: true });
+    } catch (err: any) {
+      console.error('Firestore updateProperty error:', err);
+      let errorMsg = err?.message || String(err);
+      if (errorMsg.includes('not found') || errorMsg.includes('Database')) {
+        errorMsg = `Firestore Database not found in project 'peak-ego-v224x'. Please ensure database 'ai-studio-thikana-9c4578c1-2846-48dc-b655-1dd95d3749bb' is created in Firebase Console. Details: ${errorMsg}`;
       }
-    } catch (err) {
-      console.warn('Firestore updateProperty sync error:', err);
+      this.firestoreError = errorMsg;
+      this.notify();
+      return { success: false, status: 500, message: errorMsg };
     }
+
+    this.properties[idx] = updatedProp;
     this.notify();
     return { success: true, message: 'Property updated successfully.' };
   }
@@ -895,7 +958,11 @@ class DataStore {
     if (prop) {
       prop.status = prop.status === 'active' ? 'blocked' : 'active';
       if (db) {
-        setDoc(doc(db, 'properties', id), { status: prop.status }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyStatus error:', err));
+        setDoc(doc(db, 'properties', id), { status: prop.status }, { merge: true }).catch((err) => {
+          console.error('Firestore togglePropertyStatus error:', err);
+          this.firestoreError = err?.message || String(err);
+          this.notify();
+        });
       }
       this.notify();
     }
@@ -906,7 +973,11 @@ class DataStore {
     if (prop) {
       prop.isVerified = verified !== undefined ? verified : !prop.isVerified;
       if (db) {
-        setDoc(doc(db, 'properties', id), { isVerified: prop.isVerified }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyVerified error:', err));
+        setDoc(doc(db, 'properties', id), { isVerified: prop.isVerified }, { merge: true }).catch((err) => {
+          console.error('Firestore togglePropertyVerified error:', err);
+          this.firestoreError = err?.message || String(err);
+          this.notify();
+        });
       }
       if (prop.isVerified) {
         this.addTransaction({
@@ -929,7 +1000,11 @@ class DataStore {
     if (prop) {
       prop.isFeatured = featured !== undefined ? featured : !prop.isFeatured;
       if (db) {
-        setDoc(doc(db, 'properties', id), { isFeatured: prop.isFeatured }, { merge: true }).catch((err) => console.warn('Firestore togglePropertyFeatured error:', err));
+        setDoc(doc(db, 'properties', id), { isFeatured: prop.isFeatured }, { merge: true }).catch((err) => {
+          console.error('Firestore togglePropertyFeatured error:', err);
+          this.firestoreError = err?.message || String(err);
+          this.notify();
+        });
       }
       if (prop.isFeatured) {
         this.addTransaction({
@@ -947,7 +1022,7 @@ class DataStore {
     }
   }
 
-  public deleteProperty(id: string): { success: boolean; status?: number; message?: string } {
+  public async deleteProperty(id: string): Promise<{ success: boolean; status?: number; message?: string }> {
     const prop = this.getPropertyById(id);
     if (!prop) {
       return { success: false, status: 404, message: 'Property not found.' };
@@ -959,19 +1034,37 @@ class DataStore {
       return { 
         success: false, 
         status: 403, 
-        message: '403 Forbidden: You do not have permission to delete this property listing.' 
+        message: '403 Forbidden: Only the property owner can delete this listing.' 
       };
     }
 
-    this.properties = this.properties.filter((p) => p.id !== id);
-    const deletedRooms = this.rooms.filter((r) => r.propertyId === id);
-    this.rooms = this.rooms.filter((r) => r.propertyId !== id);
-    
-    if (db) {
-      deleteDoc(doc(db, 'properties', id)).catch((err) => console.warn('Firestore deleteProperty error:', err));
-      deletedRooms.forEach((r) => deleteDoc(doc(db, 'rooms', r.id)).catch(() => {}));
+    if (!db) {
+      return {
+        success: false,
+        status: 500,
+        message: 'Firestore Database is not connected. ' + (firebaseConfigError || '')
+      };
     }
-    
+
+    try {
+      await deleteDoc(doc(db, 'properties', id));
+      const deletedRooms = this.rooms.filter((r) => r.propertyId === id);
+      for (const r of deletedRooms) {
+        await deleteDoc(doc(db, 'rooms', r.id)).catch(() => {});
+      }
+    } catch (err: any) {
+      console.error('Firestore deleteProperty error:', err);
+      let errorMsg = err?.message || String(err);
+      if (errorMsg.includes('not found') || errorMsg.includes('Database')) {
+        errorMsg = `Firestore Database not found in project 'peak-ego-v224x'. Please ensure database 'ai-studio-thikana-9c4578c1-2846-48dc-b655-1dd95d3749bb' is created in Firebase Console. Details: ${errorMsg}`;
+      }
+      this.firestoreError = errorMsg;
+      this.notify();
+      return { success: false, status: 500, message: errorMsg };
+    }
+
+    this.properties = this.properties.filter((p) => p.id !== id);
+    this.rooms = this.rooms.filter((r) => r.propertyId !== id);
     this.notify();
     return { success: true, message: 'Property deleted successfully.' };
   }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Property, RoomType, User } from '../types';
 import { store } from '../services/store';
+import { auth } from '../lib/firebase';
 import { AuthModal } from '../components/AuthModal';
 import { QRPerformanceCard } from '../components/QRPerformanceCard';
 import { 
@@ -293,7 +294,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   };
 
   // Save Property Form Submit
-  const handleSaveProperty = (e: React.FormEvent) => {
+  const handleSaveProperty = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -347,8 +348,17 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       .filter((s) => s.length > 0);
 
     const user = store.getCurrentUser();
+    const fbUser = auth?.currentUser;
+    const isGoogleAuth = Boolean(fbUser || user?.googleUid || user?.isGoogleUser);
+
     if (!user) {
-      setFormError('⚠️ Authentication required! Please log in or sign up to list a property.');
+      setFormError('⚠️ Google Login required! Please sign in with Google to list a property.');
+      setAuthModalOpen(true);
+      return;
+    }
+
+    if (!isGoogleAuth) {
+      setFormError('⚠️ Google Login required! You must sign in with Google to add a property listing.');
       setAuthModalOpen(true);
       return;
     }
@@ -361,7 +371,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     try {
       if (editingPropertyId) {
         // Update
-        store.updateProperty(editingPropertyId, {
+        const res = await store.updateProperty(editingPropertyId, {
           title,
           description,
           propertyType,
@@ -379,10 +389,14 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
           ownerPhone: finalPhone,
           ownerWhatsApp: finalWhatsApp,
         });
+        if (!res.success) {
+          setFormError(`⚠️ ${res.message || 'Failed to update property.'}`);
+          return;
+        }
         alert('Property updated successfully!');
       } else {
         // Create New
-        const newProp = store.addProperty({
+        const newProp = await store.addProperty({
           title,
           description,
           propertyType,
@@ -423,7 +437,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         }
 
         setFilterMode('all');
-        alert(`🎉 Property "${newProp?.title || title}" listed & published successfully!\n\nIt is now saved and live on the Home Page and All Listings.`);
+        alert(`🎉 Property "${newProp?.title || title}" listed & published successfully!\n\nIt is now saved in Firestore and live on the Home Page and All Listings.`);
       }
 
       setIsFormOpen(false);
@@ -677,9 +691,14 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                               <Edit3 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => {
+                              onClick={async () => {
                                 if (confirm('Delete this property listing?')) {
-                                  store.deleteProperty(property.id);
+                                  const res = await store.deleteProperty(property.id);
+                                  if (!res.success) {
+                                    alert(`⚠️ Failed to delete property: ${res.message}`);
+                                  } else {
+                                    alert('Property deleted successfully.');
+                                  }
                                 }
                               }}
                               className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl"

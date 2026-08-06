@@ -9,6 +9,7 @@ export interface User {
   passwordSalt?: string;
   googleEmail?: string;
   googleUid?: string;
+  isGoogleUser?: boolean;
   email: string;
   phone: string;
   whatsapp: string;
