@@ -61,18 +61,46 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Properties Collection: Publicly readable; hosts can create/manage properties so all users see them
+    // Properties Collection: Publicly readable; strictly owned create/update/delete based on author UID or admin role
     match /properties/{propertyId} {
       allow read: if true;
-      allow create, update: if isValidProperty();
-      allow delete: if true;
+      allow create: if isValidProperty() && (
+        !isSignedIn() ||
+        request.resource.data.get('ownerUid', '') == request.auth.uid ||
+        request.resource.data.get('ownerId', '') == request.auth.uid ||
+        isAdmin()
+      );
+      allow update: if isValidProperty() && isSignedIn() && (
+        resource.data.get('ownerUid', '') == request.auth.uid ||
+        resource.data.get('ownerId', '') == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.get('ownerUid', '') == request.auth.uid ||
+        resource.data.get('ownerId', '') == request.auth.uid ||
+        isAdmin()
+      );
     }
 
-    // Rooms Collection: Publicly readable; hosts can create/manage room types
+    // Rooms Collection: Publicly readable; hosts manage rooms matching author UID or admin role
     match /rooms/{roomId} {
       allow read: if true;
-      allow create, update: if isValidRoom();
-      allow delete: if true;
+      allow create: if isValidRoom() && (
+        !isSignedIn() ||
+        request.resource.data.get('ownerUid', '') == request.auth.uid ||
+        request.resource.data.get('ownerId', '') == request.auth.uid ||
+        isAdmin()
+      );
+      allow update: if isValidRoom() && isSignedIn() && (
+        resource.data.get('ownerUid', '') == request.auth.uid ||
+        resource.data.get('ownerId', '') == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.get('ownerUid', '') == request.auth.uid ||
+        resource.data.get('ownerId', '') == request.auth.uid ||
+        isAdmin()
+      );
     }
 
     // Booking Enquiries Collection: Validated submission; access restricted to involved host/guest or admin

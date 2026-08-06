@@ -5,7 +5,7 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 // Safely attempt to load firebase-applet-config.json if present
 let config: Record<string, any> = {};
 try {
-  const configs = import.meta.glob('../../firebase-applet-config.json', { eager: true });
+  const configs = import.meta.glob(['/firebase-applet-config.json', '../../firebase-applet-config.json', '../firebase-applet-config.json'], { eager: true });
   const keys = Object.keys(configs);
   if (keys.length > 0) {
     config = ((configs[keys[0]] as any).default || configs[keys[0]]) as Record<string, any>;
