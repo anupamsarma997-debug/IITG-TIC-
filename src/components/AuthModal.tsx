@@ -544,6 +544,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* MODE 2: LOGIN */}
         {mode === 'login' && (
           <form onSubmit={handleLoginSubmit} className="space-y-3">
+            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300">
+              <span className="font-bold">💡 Demo Sign In Credentials:</span>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px]">
+                <span>Host: <strong className="text-emerald-900 dark:text-emerald-200">pranab123</strong></span>
+                <span>Admin: <strong className="text-emerald-900 dark:text-emerald-200">admin</strong></span>
+                <span>Password: <strong className="text-emerald-900 dark:text-emerald-200">123456</strong></span>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Email Address or Username

@@ -203,6 +203,10 @@ class DataStore {
           userObj.passwordSalt = salt;
           userObj.passwordHash = hashPasswordWithSalt((userObj as any).password, salt);
           delete (userObj as any).password;
+        } else if (!userObj.passwordHash) {
+          const salt = userObj.passwordSalt || generateSalt();
+          userObj.passwordSalt = salt;
+          userObj.passwordHash = hashPasswordWithSalt('123456', salt);
         }
         return userObj;
       });
