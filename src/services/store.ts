@@ -842,8 +842,8 @@ class DataStore {
     const firebaseEmail = auth?.currentUser?.email;
     const currentUser = this.getCurrentUser();
 
-    if (!firebaseUid && !currentUser?.googleUid) {
-      throw new Error('Authentication required: You must be signed in with Google / Firebase Auth to list a new property.');
+    if (!currentUser && !firebaseUid) {
+      throw new Error('Authentication required: Please sign in with Google or Email to list a new property.');
     }
 
     const now = new Date();
@@ -852,8 +852,8 @@ class DataStore {
 
     const price = planType === 'standard_1500' ? 1500 : 1000;
 
-    const ownerUid = firebaseUid || currentUser?.googleUid || currentUser?.id || 'owner_anon';
-    const ownerEmail = firebaseEmail || currentUser?.googleEmail || prop.ownerEmail || currentUser?.email || '';
+    const ownerUid = firebaseUid || currentUser?.googleUid || currentUser?.id || 'owner_' + Date.now();
+    const ownerEmail = firebaseEmail || currentUser?.googleEmail || currentUser?.email || prop.ownerEmail || '';
     const ownerId = currentUser?.id || firebaseUid || prop.ownerId || ownerUid;
 
     const newProp: Property = {

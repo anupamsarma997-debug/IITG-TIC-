@@ -412,7 +412,11 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     const user = store.getCurrentUser();
 
     if (!user) {
-      setFormError('⚠️ Please sign in to list a property.');
+      setFormError('⚠️ Please sign in with Google or Email to list your property.');
+      setPendingAction(() => () => {
+        const fakeEvt = { preventDefault: () => {} } as React.FormEvent;
+        handleSaveProperty(fakeEvt);
+      });
       setAuthModalOpen(true);
       return;
     }
