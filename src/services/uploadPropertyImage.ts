@@ -1,7 +1,6 @@
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'];
 
 export interface UploadProgressCallback {
@@ -9,8 +8,72 @@ export interface UploadProgressCallback {
 }
 
 /**
- * Uploads a property image to Firebase Storage under `properties/{ownerUid}/{propertyId}/...`
- * Returns the public HTTPS download URL.
+ * Helper to compress and resize an image file into an optimized Data URL.
+ * Keeps maximum dimension at 1200px and JPEG quality at 0.82 for super fast loading.
+ */
+function compressImageToDataUrl(file: File, maxDimension = 1200, quality = 0.82): Promise<string> {
+  return new Promise((resolve) => {
+    // 1.5s timeout guarantee so it never hangs
+    const timeout = setTimeout(() => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string) || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    }, 1500);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        clearTimeout(timeout);
+        try {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+            resolve(compressedDataUrl);
+            return;
+          }
+        } catch (e) {
+          console.warn('Canvas compression failed, falling back to raw data URL:', e);
+        }
+        resolve((event.target?.result as string) || '');
+      };
+      img.onerror = () => {
+        clearTimeout(timeout);
+        resolve((event.target?.result as string) || '');
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => {
+      clearTimeout(timeout);
+      const r = new FileReader();
+      r.onloadend = () => resolve((r.result as string) || '');
+      r.onerror = () => resolve('');
+      r.readAsDataURL(file);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Uploads a property image to Supabase Storage or returns an optimized Data URL.
  */
 export async function uploadPropertyPhoto(
   file: File,
@@ -30,113 +93,60 @@ export async function uploadPropertyPhoto(
   // Validate File Size
   if (file.size > MAX_FILE_SIZE) {
     const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
-    throw new Error(`File "${file.name}" (${sizeInMB} MB) exceeds the maximum allowed size of 5 MB.`);
+    throw new Error(`File "${file.name}" (${sizeInMB} MB) exceeds the maximum allowed size of 10 MB.`);
   }
 
-  // ImgBB API Key check
-  const imgbbApiKey = import.meta.env.VITE_IMGBB_API_KEY || (typeof window !== 'undefined' && (window as any).IMGBB_API_KEY);
+  if (onProgress) onProgress(20);
 
-  // 1. Try ImgBB if key is available
-  if (imgbbApiKey) {
+  // 1. Primary: Try Supabase Storage
+  if (supabase) {
     try {
-      if (onProgress) onProgress(30);
-      const formData = new FormData();
-      formData.append('image', file);
-      const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbApiKey}`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (onProgress) onProgress(80);
-      const data = await res.json();
-      if (data && data.success && data.data && data.data.url) {
-        if (onProgress) onProgress(100);
-        return data.data.url as string;
+      if (onProgress) onProgress(50);
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanFileName}`;
+      const filePath = `properties/${ownerUid}/${propertyId}/${uniqueName}`;
+
+      const { data, error } = await supabase.storage
+        .from('properties')
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+      if (!error && data) {
+        const { data: publicUrlData } = supabase.storage.from('properties').getPublicUrl(filePath);
+        if (publicUrlData?.publicUrl) {
+          if (onProgress) onProgress(100);
+          return publicUrlData.publicUrl;
+        }
+      } else if (error) {
+        console.warn('Supabase storage upload error:', error.message);
       }
-    } catch (e) {
-      console.warn('ImgBB upload error, falling back:', e);
+    } catch (sErr) {
+      console.warn('Supabase Storage upload note:', sErr);
     }
   }
 
-  // 2. Try Firebase Storage if initialized
-  if (storage) {
-    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanFileName}`;
-    const storagePath = `properties/${ownerUid}/${propertyId}/${uniqueName}`;
-    const storageRef = ref(storage, storagePath);
-
-    return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(storageRef, file, {
-        contentType: file.type || 'image/jpeg',
-        customMetadata: {
-          ownerUid,
-          propertyId,
-          originalName: file.name
-        }
-      });
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          if (onProgress && snapshot.totalBytes > 0) {
-            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-            onProgress(progress);
-          }
-        },
-        (error) => {
-          console.error('Firebase Storage upload error:', error);
-          // Fall back to base64 Data URL
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (onProgress) onProgress(100);
-            resolve(reader.result as string);
-          };
-          reader.readAsDataURL(file);
-        },
-        async () => {
-          try {
-            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(downloadUrl);
-          } catch (err: any) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (onProgress) onProgress(100);
-              resolve(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-          }
-        }
-      );
-    });
-  }
-
-  // 3. Fallback to base64 Data URL if neither ImgBB nor Firebase Storage is available
-  return new Promise((resolve, reject) => {
-    if (onProgress) onProgress(50);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (onProgress) onProgress(100);
-      resolve(reader.result as string);
-    };
-    reader.onerror = (err) => reject(new Error('Failed to read file: ' + String(err)));
-    reader.readAsDataURL(file);
-  });
+  // 2. Guaranteed fast fallback to optimized Data URL
+  if (onProgress) onProgress(70);
+  const compressedDataUrl = await compressImageToDataUrl(file);
+  if (onProgress) onProgress(100);
+  return compressedDataUrl;
 }
 
 /**
- * Deletes a property photo from Firebase Storage given its HTTPS download URL.
+ * Deletes a property photo given its URL.
  */
 export async function deletePropertyPhoto(downloadUrl: string): Promise<void> {
-  if (!storage || !downloadUrl) return;
+  if (!downloadUrl) return;
 
-  // Only attempt deletion for Firebase Storage URLs
-  if (!downloadUrl.includes('firebasestorage.googleapis.com') && !downloadUrl.includes('firebasestorage')) {
-    return;
-  }
-
-  try {
-    const photoRef = ref(storage, downloadUrl);
-    await deleteObject(photoRef);
-  } catch (err: any) {
-    console.warn(`Could not delete storage object at ${downloadUrl}:`, err?.message || err);
+  if (supabase && downloadUrl.includes('supabase.co')) {
+    try {
+      const parts = downloadUrl.split('/properties/');
+      if (parts[1]) {
+        await supabase.storage.from('properties').remove([`properties/${parts[1]}`]);
+      }
+    } catch (err: any) {
+      console.warn(`Could not delete Supabase storage object:`, err?.message || err);
+    }
   }
 }
+
+

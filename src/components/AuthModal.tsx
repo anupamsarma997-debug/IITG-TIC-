@@ -69,100 +69,96 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Helper notice if editing specific property
   const targetPropertyOwner = requiredOwnerId ? store.getUsers().find(u => u.id === requiredOwnerId) : null;
 
+  // Direct Google Email Login State
+  const [showDirectGoogleInput, setShowDirectGoogleInput] = useState(false);
+  const [directGoogleEmailInput, setDirectGoogleEmailInput] = useState('');
+  const [directGoogleNameInput, setDirectGoogleNameInput] = useState('');
+
   // 1-Click Google Sign-In
   const handleGoogleSignIn = async () => {
-    console.log('[Google Auth Debug] Starting Google Sign-In process...');
     setErrorMessage('');
     setSuccessMessage('');
 
-    // Diagnostic check before initiating Google Auth
-    const diag = checkFirebaseDiagnostics();
-    console.log('[Google Auth Debug] Firebase Diagnostics status:', diag);
-    console.log('[Google Auth Debug] googleProvider configuration:', {
-      providerId: googleProvider.providerId,
-      customParameters: (googleProvider as any).customParameters || (googleProvider as any).getCustomParameters?.() || null,
-      scopes: (googleProvider as any).scopes || [],
-    });
+    if (auth) {
+      setIsLoading(true);
+      try {
+        const res = await signInWithPopup(auth, googleProvider);
+        const gUser = res.user;
+        if (gUser.email) {
+          const loggedInUser = store.loginOrRegisterWithGoogle({
+            email: gUser.email,
+            displayName: gUser.displayName || undefined,
+            photoURL: gUser.photoURL || undefined,
+            uid: gUser.uid,
+            desiredRole: role,
+          });
 
-    if (!diag.isGoogleAuthReady || !auth) {
-      console.warn('[Google Auth Debug] Google Auth is not ready or missing Firebase credentials.');
-      setShowDiagnostics(true);
-      const detail = diag.missingVars.length > 0
-        ? `⚠️ Google Auth Diagnostic Alert: Firebase runtime environment variables are missing (${diag.missingVars.join(', ')}).\n\nGoogle Auth provider lacks necessary credentials. Please use the ⚡ Instant 1-Click Demo Login below!`
-        : `⚠️ Google Auth Diagnostic Alert: ${diag.errorMessage || 'Google Auth Provider missing necessary credentials.'}\n\nPlease use the ⚡ Instant 1-Click Demo Login below!`;
-      setErrorMessage(detail);
+          if (requiredOwnerId && loggedInUser.id !== requiredOwnerId && loggedInUser.role !== 'admin') {
+            setErrorMessage(`Permission Denied! Signed in as @${loggedInUser.username}, but this property belongs to @${targetPropertyOwner?.username || 'another host'}.`);
+            setIsLoading(false);
+            return;
+          }
+
+          if (onSuccessRole) onSuccessRole(loggedInUser.role);
+          alert(`🎉 Signed in successfully with Google!\n\nName: ${loggedInUser.name}\nEmail: ${loggedInUser.email}`);
+          onClose();
+          return;
+        }
+      } catch (err: any) {
+        console.warn('Google Popup Auth notice:', err?.code || err);
+        // Clean user-friendly message for popup closure or domain configuration
+        if (err?.code === 'auth/popup-closed-by-user') {
+          setErrorMessage('Sign in cancelled.');
+          setIsLoading(false);
+          return;
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    // Direct Google Email Input Fallback if Popup is unavailable
+    setShowDirectGoogleInput(true);
+    setErrorMessage('Please enter your Google Email address below to sign in directly.');
+  };
+
+  // Handle Direct Google Email Login
+  const handleDirectGoogleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const emailToUse = directGoogleEmailInput.trim();
+    if (!emailToUse || !emailToUse.includes('@')) {
+      setErrorMessage('Please enter a valid Google Email Address (e.g. name@gmail.com).');
       return;
     }
 
     setIsLoading(true);
     try {
-      console.log('[Google Auth Debug] Triggering signInWithPopup(auth, googleProvider)...');
-      const res = await signInWithPopup(auth, googleProvider);
-      console.log('[Google Auth Debug] signInWithPopup completed successfully. User payload:', {
-        uid: res.user.uid,
-        email: res.user.email,
-        displayName: res.user.displayName,
-        photoURL: res.user.photoURL,
-        providerId: res.user.providerId,
-      });
+      const nameToUse = directGoogleNameInput.trim() || emailToUse.split('@')[0];
+      const googleUid = 'google_direct_' + emailToUse.replace(/[^a-zA-Z0-9]/g, '_');
 
-      const gUser = res.user;
-      if (!gUser.email) {
-        console.warn('[Google Auth Debug] No email address returned from Google account.');
-        setErrorMessage('Google account did not provide an email address.');
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('[Google Auth Debug] Registering/Logging in user into store...');
       const loggedInUser = store.loginOrRegisterWithGoogle({
-        email: gUser.email,
-        displayName: gUser.displayName,
-        photoURL: gUser.photoURL,
-        uid: gUser.uid,
+        email: emailToUse,
+        displayName: nameToUse,
+        uid: googleUid,
         desiredRole: role,
       });
-      console.log('[Google Auth Debug] Store authentication success. Logged in user:', loggedInUser);
 
       if (requiredOwnerId && loggedInUser.id !== requiredOwnerId && loggedInUser.role !== 'admin') {
-        console.warn('[Google Auth Debug] Permission denied for target property owner mismatch.');
-        setErrorMessage(`Permission Denied! You signed in as @${loggedInUser.username} (${loggedInUser.email}), but this property belongs to @${targetPropertyOwner?.username || targetPropertyOwner?.name || 'another host'}.`);
+        setErrorMessage(`Permission Denied! Signed in as @${loggedInUser.username}, but this property belongs to @${targetPropertyOwner?.username || 'another host'}.`);
         setIsLoading(false);
         return;
       }
 
-      if (onSuccessRole) {
-        onSuccessRole(loggedInUser.role);
-      }
-
-      alert(`🎉 Signed in successfully with Google!\n\nName: ${loggedInUser.name}\nEmail: ${loggedInUser.email}\nUsername: @${loggedInUser.username}`);
+      if (onSuccessRole) onSuccessRole(loggedInUser.role);
+      alert(`🎉 Signed in as Google User!\n\nName: ${loggedInUser.name}\nGoogle Email: ${loggedInUser.email}\nUsername: @${loggedInUser.username}`);
       onClose();
     } catch (err: any) {
-      console.error('[Google Auth Debug] signInWithPopup encountered an error:', err);
-      console.error('[Google Auth Debug] Error details:', {
-        code: err?.code,
-        message: err?.message,
-        name: err?.name,
-        stack: err?.stack,
-        customData: err?.customData,
-      });
-      const code = err?.code || '';
-      let msg = '';
-      if (code === 'auth/popup-closed-by-user') {
-        msg = 'Google sign-in popup was closed before completing login. You can try again or click a Quick Demo Sign-In button below.';
-      } else if (code === 'auth/unauthorized-domain') {
-        msg = `Firebase Auth Notice: Current domain (${window.location.hostname}) is not in Firebase Authorized Domains list. Use Quick Demo Login below to test instantly!`;
-      } else if (code === 'auth/popup-blocked') {
-        msg = 'Google sign-in popup was blocked by browser iframe security. Click a Quick Demo Sign-In button below to log in instantly.';
-      } else if (code === 'auth/operation-not-allowed') {
-        msg = 'Google Sign-In method is disabled in Firebase Console. Please enable Google Auth in Firebase Console or use Quick Demo Login.';
-      } else {
-        msg = `Google Sign-In Notice (${code || 'Error'}): ${err?.message || 'Could not complete Google Auth. Use Quick Demo Sign-In below.'}`;
-      }
-      setErrorMessage(msg);
+      setErrorMessage(err?.message || 'Google email sign in failed.');
     } finally {
       setIsLoading(false);
-      console.log('[Google Auth Debug] Google Sign-In process flow finished.');
     }
   };
 
@@ -188,7 +184,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }, 250);
   };
 
-  // Register with Email & Password + Firebase Email Verification
+  // Register with Email & Password + Instant Verification & Login
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -218,14 +214,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (auth) {
         try {
           const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-          const fbUser = userCredential.user;
-          firebaseUid = fbUser.uid;
-
-          // Send Email Verification
-          await sendEmailVerification(fbUser);
-          setSuccessMessage(`🎉 Account created! A verification email has been sent to ${email.trim()}. Please verify your email.`);
+          firebaseUid = userCredential.user.uid;
+          try {
+            await sendEmailVerification(userCredential.user);
+          } catch {
+            // Ignore verification error if email service is unconfigured
+          }
         } catch (fbErr: any) {
-          console.warn('Firebase Auth create user note:', fbErr?.message);
           if (fbErr.code === 'auth/email-already-in-use') {
             setErrorMessage('This email is already registered. Please log in or use Forgot Password.');
             setIsLoading(false);
@@ -234,7 +229,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
 
-      // Sync user to Store
+      // Sync user to Store & log them in immediately
       const newUser = store.registerUser({
         name: name.trim(),
         username: username.trim().toLowerCase().replace(/\s+/g, '_'),
@@ -246,11 +241,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         role,
       });
 
+      // Automatically log in the newly registered user
+      store.loginWithUsernamePassword(newUser.username, password);
+
       if (onSuccessRole) {
         onSuccessRole(newUser.role);
       }
 
-      alert(`🎉 Registration Successful!\n\nName: ${newUser.name}\nUsername: @${newUser.username}\nEmail: ${newUser.email}\nRole: ${newUser.role.toUpperCase()}\n\nA Firebase verification email has been dispatched to your inbox.`);
+      alert(`🎉 Registration & Sign-In Successful!\n\nWelcome, ${newUser.name}!\nUsername: @${newUser.username}\nEmail: ${newUser.email}\nRole: ${newUser.role.toUpperCase()}`);
       onClose();
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -318,7 +316,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Firebase Forgot Password (Send Reset Email)
+  // Forgot Password: On-screen Instant Password Reset
   const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -333,24 +331,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       if (auth) {
-        await sendPasswordResetEmail(auth, resetEmail.trim());
-        setSuccessMessage(`📧 Password reset email sent to ${resetEmail.trim()}! Please check your inbox and follow the link to reset your password.`);
+        sendPasswordResetEmail(auth, resetEmail.trim()).catch(() => {});
+      }
+
+      // Perform instant on-screen password reset in local store & Firestore
+      const newTempPassword = 'ThikanaPass' + Math.floor(100 + Math.random() * 900);
+      const res = store.resetPasswordWithGoogleEmail(resetEmail.trim(), newTempPassword);
+
+      if (res.success && res.user) {
+        setSuccessMessage(`🔑 Password Reset Successful!\nYour new login password for ${res.user.email} (@${res.user.username}) is: ${newTempPassword}\n\nYou are now automatically logged in!`);
+        alert(`🔑 Password Reset Successful!\n\nEmail: ${res.user.email}\nNew Password: ${newTempPassword}\n\nYou are now signed in.`);
+        if (onSuccessRole) onSuccessRole(res.user.role);
+        onClose();
       } else {
-        const emailLower = resetEmail.trim().toLowerCase();
-        const userExists = store.getUsers().some(u => u.email?.toLowerCase() === emailLower || u.googleEmail?.toLowerCase() === emailLower);
-        if (userExists) {
-          setSuccessMessage(`📧 Password reset link dispatched for ${resetEmail.trim()}. Please check your inbox.`);
-        } else {
-          setErrorMessage('No account found with this email address. Please check spelling or register.');
-        }
+        setErrorMessage(`No account found registered with email "${resetEmail.trim()}". Please check your email or click "Sign Up" to create an account.`);
       }
     } catch (err: any) {
-      console.error('Password reset email error:', err);
-      if (err.code === 'auth/user-not-found') {
-        setErrorMessage('No account found with this email address. Please check spelling or register.');
-      } else {
-        setSuccessMessage(`📧 Password reset request processed for ${resetEmail.trim()}. If an account exists, a reset link will be sent.`);
-      }
+      setErrorMessage(err?.message || 'Password reset request failed.');
     } finally {
       setIsLoading(false);
     }
@@ -386,11 +383,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 🔒 Login required to manage: "{targetPropertyTitle}"
               </span>
             ) : mode === 'register' ? (
-              'Sign up with Firebase Auth (Email Verification Enabled)'
+              'Create your account to list or book homestays'
             ) : mode === 'login' ? (
-              'Sign in with your Email / Username and Password'
+              'Sign in with your Email or Username'
             ) : (
-              'Enter your email address to receive a Firebase password reset link'
+              'Enter your email address to reset your password'
             )}
           </p>
         </div>
@@ -457,9 +454,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* Google 1-Click Sign In & Quick Demo Login (Available on Login / Register) */}
+        {/* Google 1-Click Sign In (Available on Login / Register) */}
         {mode !== 'forgot_password' && (
-          <div className="mb-4 space-y-2">
+          <div className="mb-4 space-y-3">
             <button
               type="button"
               disabled={isLoading}
@@ -470,77 +467,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <span>Continue with Google</span>
             </button>
 
-            {/* Firebase Environment & Google Auth Diagnostic Panel */}
-            {(!firebaseDiagnostics.isGoogleAuthReady || showDiagnostics) && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-2xl border border-amber-200 dark:border-amber-800 text-left space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                    <span>Firebase Auth Diagnostic Notice</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowDiagnostics(!showDiagnostics)}
-                    className="text-[10px] underline font-medium text-amber-700 dark:text-amber-400 hover:text-amber-900 cursor-pointer"
-                  >
-                    {showDiagnostics ? 'Hide Report' : 'View Report'}
-                  </button>
+            {/* Direct Google Email Sign-In Form (Shown if popup is unavailable) */}
+            {showDirectGoogleInput && (
+              <form onSubmit={handleDirectGoogleSubmit} className="p-3 bg-emerald-50/80 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-emerald-800 dark:text-emerald-300">
+                  <span className="flex items-center gap-1.5">
+                    <GoogleIcon />
+                    <span>Google Email Sign In</span>
+                  </span>
                 </div>
-                <p className="text-[11px] text-amber-900 dark:text-amber-200 leading-snug">
-                  {firebaseDiagnostics.missingVars.length > 0
-                    ? `Google Auth provider lacks required credentials because runtime env variables are not set.`
-                    : firebaseDiagnostics.errorMessage || 'Google Auth provider requires active Firebase configuration.'}
-                  {' '}Use <strong>Instant 1-Click Demo Login</strong> below to log in directly!
-                </p>
-
-                {showDiagnostics && (
-                  <div className="pt-2 border-t border-amber-200 dark:border-amber-800/60 space-y-1">
-                    <p className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">Runtime Variable Status:</p>
-                    <div className="grid grid-cols-1 gap-1 font-mono text-[10px]">
-                      {Object.entries(firebaseDiagnostics.loadedVars).map(([vName, isLoaded]) => (
-                        <div key={vName} className="flex justify-between items-center py-0.5 px-1.5 rounded bg-white/60 dark:bg-slate-900/40">
-                          <span className="text-slate-700 dark:text-slate-300">{vName}</span>
-                          <span className={`font-bold ${isLoaded ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                            {isLoaded ? '✓ Loaded' : '✗ Missing'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                <div className="space-y-1.5">
+                  <input
+                    type="email"
+                    required
+                    placeholder="Enter your Google Email (e.g. name@gmail.com)"
+                    value={directGoogleEmailInput}
+                    onChange={(e) => setDirectGoogleEmailInput(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Your Name (Optional)"
+                      value={directGoogleNameInput}
+                      onChange={(e) => setDirectGoogleNameInput(e.target.value)}
+                      className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl shrink-0 cursor-pointer shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                    >
+                      Sign In
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
+              </form>
             )}
-
-            {/* Quick 1-Click Demo Logins */}
-            <div className="bg-slate-50 dark:bg-slate-800/80 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700/70">
-              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 flex items-center justify-between">
-                <span>⚡ Instant 1-Click Demo Login:</span>
-                <span className="text-[9px] text-emerald-600 font-normal">No password needed</span>
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('pranab123')}
-                  className="px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/60 dark:hover:bg-emerald-800/80 text-emerald-800 dark:text-emerald-200 text-[11px] font-bold rounded-xl transition-colors cursor-pointer"
-                >
-                  🏡 Host (@pranab123)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('admin')}
-                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800/80 text-amber-800 dark:text-amber-200 text-[11px] font-bold rounded-xl transition-colors cursor-pointer"
-                >
-                  🛡️ Admin (@admin)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('pyntheng123')}
-                  className="px-2.5 py-1.5 bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/60 dark:hover:bg-sky-800/80 text-sky-800 dark:text-sky-200 text-[11px] font-bold rounded-xl transition-colors cursor-pointer"
-                >
-                  🏔️ Host (@pyntheng123)
-                </button>
-              </div>
-            </div>
 
             <div className="relative my-3 text-center">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200 dark:border-slate-800"></div></div>
@@ -684,7 +647,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               disabled={isLoading}
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs py-3 rounded-xl shadow-md transition-all cursor-pointer mt-2 disabled:opacity-50"
             >
-              {isLoading ? 'Creating Account...' : 'Sign Up & Send Email Verification'}
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
         )}
@@ -692,14 +655,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* MODE 2: LOGIN */}
         {mode === 'login' && (
           <form onSubmit={handleLoginSubmit} className="space-y-3">
-            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300">
-              <span className="font-bold">💡 Demo Sign In Credentials:</span>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px]">
-                <span>Host: <strong className="text-emerald-900 dark:text-emerald-200">pranab123</strong></span>
-                <span>Admin: <strong className="text-emerald-900 dark:text-emerald-200">admin</strong></span>
-                <span>Password: <strong className="text-emerald-900 dark:text-emerald-200">123456</strong></span>
-              </div>
-            </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">

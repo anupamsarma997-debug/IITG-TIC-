@@ -116,8 +116,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     const fbUser = auth?.currentUser;
     const user = store.getCurrentUser();
 
-    if (!fbUser && !user?.googleUid) {
-      setFormError('⚠️ Authentication required: Please sign in with Google to upload property photos.');
+    if (!fbUser && !user) {
+      setFormError('⚠️ Authentication required: Please sign in to upload property photos.');
       setAuthTargetTitle('Upload Property Photos');
       setAuthModalOpen(true);
       return;
@@ -141,8 +141,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
         return;
       }
 
-      if (file.size > 5 * 1024 * 1024) {
-        setFormError(`⚠️ File Size Error: "${file.name}" exceeds the maximum limit of 5 MB.`);
+      if (file.size > 10 * 1024 * 1024) {
+        setFormError(`⚠️ File Size Error: "${file.name}" exceeds the maximum limit of 10 MB.`);
         return;
       }
 
@@ -195,10 +195,10 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   // Room Management State
   const [editingRoomsPropId, setEditingRoomsPropId] = useState<string | null>(null);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [roomName, setRoomName] = useState('Deluxe Mountain View Room');
-  const [pricePerNight, setPricePerNight] = useState(2000);
-  const [discountPrice, setDiscountPrice] = useState(1700);
-  const [maxGuests, setMaxGuests] = useState(3);
+  const [roomName, setRoomName] = useState('Standard Deluxe Room');
+  const [pricePerNight, setPricePerNight] = useState<number | ''>('');
+  const [discountPrice, setDiscountPrice] = useState<number | ''>('');
+  const [maxGuests, setMaxGuests] = useState(2);
   const [roomDescription, setRoomDescription] = useState('Spacious pine wood room with private balcony.');
   const [roomSize, setRoomSize] = useState('280 sq.ft.');
   const [bedType, setBedType] = useState('King Size Bed');
@@ -266,13 +266,13 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     setOwnerWhatsAppInput(user?.whatsapp || '919876543210');
 
     // Pre-fill initial room setup
-    setRoomName('Traditional Bamboo Stilt (Chang Ghar) Suite');
-    setPricePerNight(2200);
-    setDiscountPrice(1800);
-    setMaxGuests(3);
-    setRoomSize('300 sq.ft.');
-    setBedType('King Bamboo Bed');
-    setRoomDescription('Authentic bamboo homestay with tea garden views & hot shower.');
+    setRoomName('Standard Deluxe Room');
+    setPricePerNight('');
+    setDiscountPrice('');
+    setMaxGuests(2);
+    setRoomSize('250 sq.ft.');
+    setBedType('Double Bed');
+    setRoomDescription('Authentic homestay room with tea garden / mountain views & hot shower.');
     setRoomAmenities('WiFi, Geyser, Electric Kettle, Balcony View, Breakfast Included');
 
     setIsFormOpen(true);
@@ -379,13 +379,16 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       return;
     }
 
+    const numPrice = typeof pricePerNight === 'number' ? pricePerNight : (parseInt(String(pricePerNight)) || 0);
+    const numDiscount = discountPrice !== '' ? (typeof discountPrice === 'number' ? discountPrice : (parseInt(String(discountPrice)) || numPrice)) : numPrice;
+
     if (!editingPropertyId) {
       if (!roomName.trim()) {
         setFormError('⚠️ Please enter a Room Type Name for initial room setup.');
         return;
       }
-      if (!pricePerNight || pricePerNight <= 0) {
-        setFormError('⚠️ Please enter a valid Price Per Night greater than 0.');
+      if (!numPrice || numPrice <= 0) {
+        setFormError('⚠️ Please enter your room price (Price Per Night).');
         return;
       }
     }
@@ -477,8 +480,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
           store.addRoomType({
             propertyId: newProp.id,
             roomName: roomName || 'Standard Room',
-            pricePerNight: pricePerNight || 2000,
-            discountPrice: discountPrice || pricePerNight || 1800,
+            pricePerNight: numPrice,
+            discountPrice: numDiscount,
             maxGuests: maxGuests || 2,
             description: roomDescription || 'Clean room with hot shower and warm hospitality.',
             amenities: amList,
@@ -502,13 +505,13 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
   const handleOpenAddRoom = (propertyId: string) => {
     setEditingRoomsPropId(propertyId);
     setEditingRoomId(null);
-    setRoomName('Deluxe Balcony Room');
-    setPricePerNight(2200);
-    setDiscountPrice(1800);
-    setMaxGuests(3);
+    setRoomName('Standard Deluxe Room');
+    setPricePerNight('');
+    setDiscountPrice('');
+    setMaxGuests(2);
     setRoomDescription('Comfortable room with mountain/garden view, attached bath and hot shower.');
     setRoomSize('280 sq ft');
-    setBedType('King Size Bed');
+    setBedType('Double Bed');
     setRoomAmenities('Free WiFi, Geyser, Electric Kettle, Balcony View');
   };
 
@@ -531,14 +534,22 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
     e.preventDefault();
     if (!editingRoomsPropId) return;
 
+    const numPrice = typeof pricePerNight === 'number' ? pricePerNight : (parseInt(String(pricePerNight)) || 0);
+    const numDiscount = discountPrice !== '' ? (typeof discountPrice === 'number' ? discountPrice : (parseInt(String(discountPrice)) || numPrice)) : numPrice;
+
+    if (!numPrice || numPrice <= 0) {
+      alert('Please enter your room price.');
+      return;
+    }
+
     const amList = roomAmenities.split(',').map((s) => s.trim()).filter(Boolean);
 
     if (editingRoomId) {
       // Update existing room
       store.updateRoom(editingRoomId, {
         roomName,
-        pricePerNight,
-        discountPrice,
+        pricePerNight: numPrice,
+        discountPrice: numDiscount,
         maxGuests,
         description: roomDescription,
         amenities: amList,
@@ -551,8 +562,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
       store.addRoomType({
         propertyId: editingRoomsPropId,
         roomName,
-        pricePerNight,
-        discountPrice,
+        pricePerNight: numPrice,
+        discountPrice: numDiscount,
         maxGuests,
         description: roomDescription,
         amenities: amList,
@@ -1600,8 +1611,9 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                       <input
                         type="number"
                         required
+                        placeholder="Enter your room price"
                         value={pricePerNight}
-                        onChange={(e) => setPricePerNight(parseInt(e.target.value) || 1000)}
+                        onChange={(e) => setPricePerNight(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                         className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
                       />
                     </div>
@@ -1612,8 +1624,9 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                       </label>
                       <input
                         type="number"
+                        placeholder="Enter discount price (optional)"
                         value={discountPrice}
-                        onChange={(e) => setDiscountPrice(parseInt(e.target.value) || 0)}
+                        onChange={(e) => setDiscountPrice(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                         className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-600 dark:text-emerald-400"
                       />
                     </div>
@@ -1707,8 +1720,9 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                   <input
                     type="number"
                     required
+                    placeholder="Enter your room price"
                     value={pricePerNight}
-                    onChange={(e) => setPricePerNight(parseInt(e.target.value) || 1000)}
+                    onChange={(e) => setPricePerNight(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
                   />
                 </div>
@@ -1717,8 +1731,9 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Discount Price / Night (₹)</label>
                   <input
                     type="number"
+                    placeholder="Enter discount price (optional)"
                     value={discountPrice}
-                    onChange={(e) => setDiscountPrice(parseInt(e.target.value) || 0)}
+                    onChange={(e) => setDiscountPrice(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-600 dark:text-emerald-400"
                   />
                 </div>
