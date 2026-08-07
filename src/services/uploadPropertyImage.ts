@@ -1,5 +1,5 @@
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '../lib/firebase';
+import { ref, deleteObject } from 'firebase/storage';
+import { storage, auth } from '../lib/firebase';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'];
@@ -8,127 +8,127 @@ export interface UploadProgressCallback {
   (progressPercent: number): void;
 }
 
-/**
- * Uploads a property image to Firebase Storage under `properties/{ownerUid}/{propertyId}/...`
- * Returns the public HTTPS download URL.
- */
+async function readFileAsDataUrl(file: File): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = (e) => reject(e);
+    r.readAsDataURL(file);
+  });
+}
+
 export async function uploadPropertyPhoto(
   file: File,
   ownerUid: string,
   propertyId: string,
-  onProgress?: UploadProgressCallback
+  onProgress?: (percent: number) => void
 ): Promise<string> {
-  if (!file) {
-    throw new Error('No file selected for upload.');
-  }
-
-  // Validate File Type
+  if (!file) throw new Error('No file selected for upload.');
   if (!ALLOWED_MIME_TYPES.includes(file.type) && !file.type.startsWith('image/')) {
-    throw new Error(`Invalid file format (${file.type || 'unknown'}). Please upload a JPEG, PNG, WEBP, AVIF, or GIF image.`);
+    throw new Error('Invalid file format.');
   }
+  if (file.size > MAX_FILE_SIZE) throw new Error('File too large.');
 
-  // Validate File Size
-  if (file.size > MAX_FILE_SIZE) {
-    const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
-    throw new Error(`File "${file.name}" (${sizeInMB} MB) exceeds the maximum allowed size of 5 MB.`);
-  }
+  // Get Firebase ID token for server verification
+  const currentUser = auth?.currentUser;
+  if (!currentUser) throw new Error('User must be signed in to upload images.');
+  const idToken = await currentUser.getIdToken(true);
 
-  if (!storage) {
-    throw new Error('Firebase Storage is not initialized or configured. Please check your Firebase credentials.');
-  }
+  // Read file as base64 data URL
+  const dataUrl = await readFileAsDataUrl(file);
+  const name = `${ownerUid}_${propertyId}_${Date.now()}`;
 
-  const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanFileName}`;
-  const storagePath = `properties/${ownerUid}/${propertyId}/${uniqueName}`;
-  const storageRef = ref(storage, storagePath);
-
-  return new Promise((resolve, reject) => {
-    const uploadTask = uploadBytesResumable(storageRef, file, {
-      contentType: file.type || 'image/jpeg',
-      customMetadata: {
-        ownerUid,
-        propertyId,
-        originalName: file.name
-      }
-    });
-
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        if (onProgress && snapshot.totalBytes > 0) {
-          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          onProgress(progress);
-        }
-      },
-      (error) => {
-        console.error('Firebase Storage upload error:', error);
-        reject(new Error(`Storage upload failed for ${file.name}: ${error.message}`));
-      },
-      async () => {
-        try {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadUrl);
-        } catch (err: any) {
-          reject(new Error(`Failed to retrieve download URL for ${file.name}: ${err?.message || err}`));
-        }
-      }
-    );
+  const resp = await fetch('/api/upload-imgbb', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ imageBase64: dataUrl, name }),
   });
+
+  const json = await resp.json();
+  if (!resp.ok || !json.success) {
+    throw new Error(json.error || 'Upload failed');
+  }
+
+  const data = json.data;
+  const displayUrl = data.display_url || data.url || (data.image && data.image.url);
+  const deleteUrl = data.delete_url || null;
+
+  if (!displayUrl) throw new Error('ImgBB did not return a usable image URL.');
+
+  // Return display URL (append delete token as fragment for backward compatibility)
+  return deleteUrl ? `${displayUrl}#delete=${encodeURIComponent(deleteUrl)}` : displayUrl;
 }
 
-/**
- * Deletes a property photo from Firebase Storage given its HTTPS download URL.
- */
 export async function deletePropertyPhoto(downloadUrl: string): Promise<void> {
-  if (!storage || !downloadUrl) return;
+  if (!downloadUrl) return;
 
-  // Only attempt deletion for Firebase Storage URLs
-  if (!downloadUrl.includes('firebasestorage.googleapis.com') && !downloadUrl.includes('firebasestorage') && !downloadUrl.startsWith('gs://')) {
+  // If ImgBB fragment present, call serverless delete endpoint with id token
+  const idx = downloadUrl.indexOf('#delete=');
+  if (idx !== -1) {
+    const encoded = downloadUrl.substring(idx + '#delete='.length);
+    const deleteUrl = decodeURIComponent(encoded);
+
+    const currentUser = auth?.currentUser;
+    if (!currentUser) {
+      console.warn('User not signed in; cannot call delete proxy.');
+      return;
+    }
+    const idToken = await currentUser.getIdToken(true);
+
+    const resp = await fetch('/api/delete-imgbb', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ deleteUrl }),
+    });
+    if (!resp.ok) {
+      const json = await resp.json().catch(() => ({}));
+      console.warn('ImgBB delete proxy failed:', json);
+    }
     return;
   }
 
-  const getStoragePathFromDownloadUrl = (url: string): string | null => {
-    try {
-      // gs://bucket/path/to/object
-      if (url.startsWith('gs://')) {
-        const withoutScheme = url.replace('gs://', '');
-        const idx = withoutScheme.indexOf('/');
-        if (idx === -1) return null;
-        return withoutScheme.substring(idx + 1);
-      }
-
-      // Typical download URL format:
-      // https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<encoded-path>?alt=media&token=...
-      const match = url.match(/\/o\/([^?]+)/);
-      if (match && match[1]) {
-        return decodeURIComponent(match[1]);
-      }
-
-      // Fallback: try parsing URL and extracting after /o/
+  // Fallback: Firebase deletion logic if it's a Firebase storage URL
+  if ((downloadUrl.includes('firebasestorage.googleapis.com') || downloadUrl.includes('firebasestorage')) && storage) {
+    const getStoragePathFromDownloadUrl = (url: string): string | null => {
       try {
-        const u = new URL(url);
-        const path = u.pathname.split('/o/')[1];
-        if (path) return decodeURIComponent(path.split('?')[0]);
+        if (url.startsWith('gs://')) {
+          const withoutScheme = url.replace('gs://', '');
+          const idx = withoutScheme.indexOf('/');
+          if (idx === -1) return null;
+          return withoutScheme.substring(idx + 1);
+        }
+        const match = url.match(/\/o\/([^?]+)/);
+        if (match && match[1]) return decodeURIComponent(match[1]);
+        try {
+          const u = new URL(url);
+          const path = u.pathname.split('/o/')[1];
+          if (path) return decodeURIComponent(path.split('?')[0]);
+        } catch (e) {}
+        return null;
       } catch (e) {
-        // ignore
+        return null;
       }
+    };
 
-      return null;
-    } catch (e) {
-      return null;
+    try {
+      const storagePath = getStoragePathFromDownloadUrl(downloadUrl);
+      if (!storagePath) {
+        console.warn('unable to determine storage path from URL', downloadUrl);
+        return;
+      }
+      const photoRef = ref(storage, storagePath);
+      await deleteObject(photoRef);
+    } catch (err: any) {
+      console.warn('Could not delete storage object:', err?.message || err);
     }
-  };
-
-  try {
-    const storagePath = getStoragePathFromDownloadUrl(downloadUrl);
-    if (!storagePath) {
-      console.warn('deletePropertyPhoto: unable to determine storage path from URL', downloadUrl);
-      return;
-    }
-
-    const photoRef = ref(storage, storagePath);
-    await deleteObject(photoRef);
-  } catch (err: any) {
-    console.warn(`Could not delete storage object at ${downloadUrl}:`, err?.message || err);
+    return;
   }
+
+  console.warn('Unknown provider or missing delete token for URL:', downloadUrl);
 }
