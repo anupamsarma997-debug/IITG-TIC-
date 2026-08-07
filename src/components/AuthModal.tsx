@@ -4,6 +4,8 @@ import { UserRole } from '../types';
 import { X, ShieldCheck, Mail, Lock, CheckCircle2, AlertCircle, RefreshCw, Send, UserCheck, KeyRound } from 'lucide-react';
 import { 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   sendEmailVerification, 
@@ -74,6 +76,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [directGoogleEmailInput, setDirectGoogleEmailInput] = useState('');
   const [directGoogleNameInput, setDirectGoogleNameInput] = useState('');
 
+  // Check for redirect result on mount if redirect auth was used
+  React.useEffect(() => {
+    if (auth) {
+      getRedirectResult(auth).then((res) => {
+        if (res && res.user && res.user.email) {
+          const gUser = res.user;
+          const loggedInUser = store.loginOrRegisterWithGoogle({
+            email: gUser.email,
+            displayName: gUser.displayName || undefined,
+            photoURL: gUser.photoURL || undefined,
+            uid: gUser.uid,
+            desiredRole: role,
+          });
+          if (onSuccessRole) onSuccessRole(loggedInUser.role);
+          alert(`🎉 Signed in successfully with Google!\n\nName: ${loggedInUser.name}\nEmail: ${loggedInUser.email}`);
+          onClose();
+        }
+      }).catch((err) => {
+        console.warn('Redirect result check error:', err);
+      });
+    }
+  }, []);
+
   // 1-Click Google Sign-In
   const handleGoogleSignIn = async () => {
     setErrorMessage('');
@@ -106,20 +131,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       } catch (err: any) {
         console.warn('Google Popup Auth notice:', err?.code || err);
-        // Clean user-friendly message for popup closure or domain configuration
         if (err?.code === 'auth/popup-closed-by-user') {
           setErrorMessage('Sign in cancelled.');
           setIsLoading(false);
           return;
+        }
+        // If popup blocked or cancelled, try redirect
+        if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/cancelled-popup-request') {
+          try {
+            setSuccessMessage('Redirecting to Google Sign-In...');
+            await signInWithRedirect(auth, googleProvider);
+            return;
+          } catch (redErr: any) {
+            console.warn('Redirect auth failed:', redErr);
+          }
         }
       } finally {
         setIsLoading(false);
       }
     }
 
-    // Direct Google Email Input Fallback if Popup is unavailable
+    // Direct Google Email Input Fallback if Popup/Auth is unavailable
     setShowDirectGoogleInput(true);
-    setErrorMessage('Please enter your Google Email address below to sign in directly.');
+    setErrorMessage('Direct Google Auth: Please enter your Google Email address below to sign in directly.');
   };
 
   // Handle Direct Google Email Login
