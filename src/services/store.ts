@@ -255,9 +255,7 @@ class DataStore {
 
   private initFirebaseListeners() {
     if (!isFirebaseConfigured || !db) {
-      if (firebaseConfigError) {
-        this.firestoreError = firebaseConfigError;
-      }
+      console.info('Running in local/standalone mode (Firebase is not configured).');
       return;
     }
     try {
@@ -323,7 +321,7 @@ class DataStore {
         if (err?.code === 'unavailable' || msg.includes('unavailable') || msg.includes('Could not reach')) {
           console.warn('Firestore offline/connecting (using local storage):', msg);
         } else if (msg.includes('not found') || msg.includes('Database')) {
-          this.firestoreError = `Firestore notice: Backend database unreachable (${msg}). Using local storage.`;
+          console.warn(`Firestore unreachable (${msg}). Using local storage fallback.`);
         } else {
           console.warn('Firestore properties sync note:', msg);
         }

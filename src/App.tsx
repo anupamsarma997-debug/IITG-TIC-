@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserRole, Property, RoomType } from './types';
 import { store } from './services/store';
-import { firebaseConfigError } from './lib/firebase';
 import { AlertTriangle } from 'lucide-react';
 
 // Components
@@ -34,6 +33,7 @@ export function App() {
   // App Frame Toggle
   const [isMobileFrame, setIsMobileFrame] = useState<boolean>(store.getMobileFrame());
   const [isDark, setIsDark] = useState<boolean>(store.getTheme());
+  const [isNoticeDismissed, setIsNoticeDismissed] = useState<boolean>(false);
 
   useEffect(() => {
     return store.subscribe(() => {
@@ -148,20 +148,21 @@ export function App() {
           selectedCity={selectedCity}
         />
 
-        {/* Firebase / Firestore Configuration Error Banner */}
-        {(firebaseConfigError || store.firestoreError) && (
+        {/* Firestore Configuration Error Banner (Dismissable) */}
+        {!isNoticeDismissed && store.firestoreError && (
           <div className="bg-amber-50 dark:bg-amber-950/80 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 px-4 py-3 text-xs sm:text-sm font-medium flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>
-                <strong>System Notice:</strong> {store.firestoreError || firebaseConfigError}
+                <strong>System Notice:</strong> {store.firestoreError}
               </span>
             </div>
             <button
               onClick={() => {
+                setIsNoticeDismissed(true);
                 store.firestoreError = null;
               }}
-              className="text-xs underline text-amber-700 dark:text-amber-300 hover:text-amber-900 shrink-0"
+              className="text-xs underline text-amber-700 dark:text-amber-300 hover:text-amber-900 shrink-0 cursor-pointer"
             >
               Dismiss
             </button>
