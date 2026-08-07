@@ -1,3 +1,5 @@
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { storage } from '../lib/firebase';
 import { supabase } from '../lib/supabase';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -98,10 +100,63 @@ export async function uploadPropertyPhoto(
 
   if (onProgress) onProgress(20);
 
-  // 1. Primary: Try Supabase Storage
+  // 1. Primary: Try Firebase Storage (with a 3-second timeout race guard)
+  if (storage) {
+    try {
+      if (onProgress) onProgress(35);
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanFileName}`;
+      const storagePath = `properties/${ownerUid}/${propertyId}/${uniqueName}`;
+      const storageRef = ref(storage, storagePath);
+
+      const firebaseUploadPromise = new Promise<string>((resolve) => {
+        const uploadTask = uploadBytesResumable(storageRef, file, {
+          contentType: file.type || 'image/jpeg',
+          customMetadata: { ownerUid, propertyId, originalName: file.name }
+        });
+
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            if (onProgress && snapshot.totalBytes > 0) {
+              const progress = Math.min(80, Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100));
+              onProgress(progress);
+            }
+          },
+          (error) => {
+            console.warn('Firebase Storage upload error:', error);
+            resolve('');
+          },
+          async () => {
+            try {
+              const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve(downloadUrl);
+            } catch {
+              resolve('');
+            }
+          }
+        );
+      });
+
+      const timeoutPromise = new Promise<string>((resolve) => {
+        setTimeout(() => resolve(''), 3000);
+      });
+
+      const fbResult = await Promise.race([firebaseUploadPromise, timeoutPromise]);
+      if (fbResult) {
+        if (onProgress) onProgress(100);
+        return fbResult;
+      }
+      console.warn('Firebase Storage attempt timed out or failed; falling back to Supabase Storage...');
+    } catch (fbErr) {
+      console.warn('Firebase Storage upload note:', fbErr);
+    }
+  }
+
+  // 2. Secondary Fallback: Try Supabase Storage
   if (supabase) {
     try {
-      if (onProgress) onProgress(50);
+      if (onProgress) onProgress(60);
       const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanFileName}`;
       const filePath = `properties/${ownerUid}/${propertyId}/${uniqueName}`;
@@ -124,8 +179,8 @@ export async function uploadPropertyPhoto(
     }
   }
 
-  // 2. Guaranteed fast fallback to optimized Data URL
-  if (onProgress) onProgress(70);
+  // 3. Final Fallback: Optimized Data URL
+  if (onProgress) onProgress(80);
   const compressedDataUrl = await compressImageToDataUrl(file);
   if (onProgress) onProgress(100);
   return compressedDataUrl;
@@ -136,6 +191,15 @@ export async function uploadPropertyPhoto(
  */
 export async function deletePropertyPhoto(downloadUrl: string): Promise<void> {
   if (!downloadUrl) return;
+
+  if (storage && (downloadUrl.includes('firebasestorage.googleapis.com') || downloadUrl.includes('firebasestorage'))) {
+    try {
+      const photoRef = ref(storage, downloadUrl);
+      await deleteObject(photoRef);
+    } catch (err: any) {
+      console.warn(`Could not delete Firebase storage object:`, err?.message || err);
+    }
+  }
 
   if (supabase && downloadUrl.includes('supabase.co')) {
     try {
