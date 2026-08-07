@@ -83,12 +83,50 @@ export async function deletePropertyPhoto(downloadUrl: string): Promise<void> {
   if (!storage || !downloadUrl) return;
 
   // Only attempt deletion for Firebase Storage URLs
-  if (!downloadUrl.includes('firebasestorage.googleapis.com') && !downloadUrl.includes('firebasestorage')) {
+  if (!downloadUrl.includes('firebasestorage.googleapis.com') && !downloadUrl.includes('firebasestorage') && !downloadUrl.startsWith('gs://')) {
     return;
   }
 
+  const getStoragePathFromDownloadUrl = (url: string): string | null => {
+    try {
+      // gs://bucket/path/to/object
+      if (url.startsWith('gs://')) {
+        const withoutScheme = url.replace('gs://', '');
+        const idx = withoutScheme.indexOf('/');
+        if (idx === -1) return null;
+        return withoutScheme.substring(idx + 1);
+      }
+
+      // Typical download URL format:
+      // https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<encoded-path>?alt=media&token=...
+      const match = url.match(/\/o\/([^?]+)/);
+      if (match && match[1]) {
+        return decodeURIComponent(match[1]);
+      }
+
+      // Fallback: try parsing URL and extracting after /o/
+      try {
+        const u = new URL(url);
+        const path = u.pathname.split('/o/')[1];
+        if (path) return decodeURIComponent(path.split('?')[0]);
+      } catch (e) {
+        // ignore
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  };
+
   try {
-    const photoRef = ref(storage, downloadUrl);
+    const storagePath = getStoragePathFromDownloadUrl(downloadUrl);
+    if (!storagePath) {
+      console.warn('deletePropertyPhoto: unable to determine storage path from URL', downloadUrl);
+      return;
+    }
+
+    const photoRef = ref(storage, storagePath);
     await deleteObject(photoRef);
   } catch (err: any) {
     console.warn(`Could not delete storage object at ${downloadUrl}:`, err?.message || err);
