@@ -42,69 +42,7 @@ async function startServer() {
     return val.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim().slice(0, maxLen);
   };
 
-  // ImgBB upload proxy endpoint (server-side) — accepts JSON { imageBase64, name }
-  app.post('/api/upload/imgbb', async (req, res) => {
-    try {
-      const imgbbKey = process.env.IMG_BB_API_KEY || process.env.IMGBB_API_KEY;
-      if (!imgbbKey) {
-        return res.status(500).json({ error: 'ImgBB API key not configured on server.' });
-      }
 
-      const { imageBase64, name } = req.body;
-      if (!imageBase64 || typeof imageBase64 !== 'string') {
-        return res.status(400).json({ error: 'Missing imageBase64 in request body.' });
-      }
-
-      // Strip data URL prefix if present
-      const base64 = imageBase64.split(',').pop();
-      if (!base64) return res.status(400).json({ error: 'Invalid base64 image data.' });
-
-      const params = new URLSearchParams();
-      params.append('key', imgbbKey);
-      params.append('image', base64);
-      if (name) params.append('name', String(name).slice(0, 150));
-
-      const imgbbRes = await fetch('https://api.imgbb.com/1/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-      });
-
-      const json = await imgbbRes.json();
-      if (!imgbbRes.ok || !json) {
-        return res.status(502).json({ error: 'ImgBB upload failed', detail: json });
-      }
-
-      return res.json({ success: true, data: json.data });
-    } catch (err: any) {
-      console.error('ImgBB upload proxy error:', err);
-      res.status(500).json({ error: err?.message || String(err) });
-    }
-  });
-
-  // ImgBB delete proxy endpoint — accepts JSON { deleteUrl }
-  app.post('/api/delete/imgbb', async (req, res) => {
-    try {
-      const { deleteUrl } = req.body;
-      if (!deleteUrl || typeof deleteUrl !== 'string') {
-        return res.status(400).json({ error: 'Missing deleteUrl in request body.' });
-      }
-
-      const resp = await fetch(deleteUrl, { method: 'GET' });
-      if (!resp.ok) {
-        const text = await resp.text();
-        console.warn('ImgBB delete proxy returned non-OK:', resp.status, text);
-        return res.status(502).json({ error: 'ImgBB delete failed', status: resp.status, detail: text });
-      }
-
-      return res.json({ success: true });
-    } catch (err: any) {
-      console.error('ImgBB delete proxy error:', err);
-      res.status(500).json({ error: err?.message || String(err) });
-    }
-  });
 
   // AI Helper 1: Generate Listing Description
   app.post('/api/ai/generate-description', async (req, res) => {
@@ -127,7 +65,7 @@ City/Location: ${city}
 Key Features: ${keyFeatures}
 Amenities: ${amenities.join(', ')}
 
-Highlight traditional Northeast hospitality (such as Chang Ghar stilt structures, local organic tea, wood heaters/fireplaces, or ethnic thalis) and emphasize that travelers connect directly with t[...]`;
+Highlight traditional Northeast hospitality (such as Chang Ghar stilt structures, local organic tea, wood heaters/fireplaces, or ethnic thalis) and emphasize that travelers connect directly with the local host via WhatsApp with ZERO middleman commission!`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',
@@ -149,7 +87,7 @@ Highlight traditional Northeast hospitality (such as Chang Ghar stilt structures
       const ai = getGenAI();
 
       const prompt = `List 4 popular nearby tourist attractions, waterfalls, national parks, tea gardens, or monasteries near "${address}, ${city}" in Northeast India.
-Return ONLY a raw JSON array of 4 strings, for example: ["Kaziranga Safari Gate (2 km)", "Orchid & Biodiversity Park (1.5 km)", "Kakochang Waterfall (14 km)", "Brahmaputra Sunset Viewpoint (8 km)"[...]`;
+Return ONLY a raw JSON array of 4 strings, for example: ["Kaziranga Safari Gate (2 km)", "Orchid & Biodiversity Park (1.5 km)", "Kakochang Waterfall (14 km)", "Brahmaputra Sunset Viewpoint (8 km)"]`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',
@@ -186,14 +124,13 @@ Return ONLY a raw JSON array of 4 strings, for example: ["Kaziranga Safari Gate 
         : [];
       const ai = getGenAI();
 
-      const contextPrompt = `You are "THIKANA Northeast AI Mitra", an expert travel guide assistant specialized in Northeast India (Assam, Meghalaya, Sikkim, Nagaland, Arunachal Pradesh, Mizoram,[...]
+      const contextPrompt = `You are "THIKANA Northeast AI Mitra", an expert travel guide assistant specialized in Northeast India (Assam, Meghalaya, Sikkim, Nagaland, Arunachal Pradesh, Mizoram, Manipur & Tripura).
 The user asks: "${query}"
 
 Here are available authentic Northeast properties on THIKANA for context:
 ${JSON.stringify(availableProperties)}
 
-Provide a helpful, polite, and personalized 2-3 paragraph answer recommending suitable places, homestays, or local travel tips (such as best seasons, local tribal thalis, permits for Tawang/Nathu[...]
-`;
+Provide a helpful, polite, and personalized 2-3 paragraph answer recommending suitable places, homestays, or local travel tips (such as best seasons, local tribal thalis, permits for Tawang/Nathula, or safari tips). Mention that travelers can click "Chat on WhatsApp" to talk directly with local hosts with zero commission!`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',

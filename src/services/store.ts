@@ -319,12 +319,13 @@ class DataStore {
         }
         this.isFirebaseSynced = true;
       }, (err) => {
-        console.error('Firestore properties sync error:', err);
         const msg = err?.message || String(err);
-        if (msg.includes('not found') || msg.includes('Database')) {
-          this.firestoreError = `Firestore Database Error: Database not found or not created in project 'peak-ego-v224x'. Details: ${msg}`;
+        if (err?.code === 'unavailable' || msg.includes('unavailable') || msg.includes('Could not reach')) {
+          console.warn('Firestore offline/connecting (using local storage):', msg);
+        } else if (msg.includes('not found') || msg.includes('Database')) {
+          this.firestoreError = `Firestore notice: Backend database unreachable (${msg}). Using local storage.`;
         } else {
-          this.firestoreError = `Firestore sync error: ${msg}`;
+          console.warn('Firestore properties sync note:', msg);
         }
         this.notify(false);
       });

@@ -42,12 +42,16 @@ if (isFirebaseConfigured) {
     const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
     if (databaseId && databaseId !== '(default)') {
       try {
-        db = getFirestore(app, databaseId);
+        db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, databaseId);
       } catch {
-        db = initializeFirestore(app, {}, databaseId);
+        db = getFirestore(app, databaseId);
       }
     } else {
-      db = getFirestore(app);
+      try {
+        db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+      } catch {
+        db = getFirestore(app);
+      }
     }
     auth = getAuth(app);
     storage = getStorage(app);
